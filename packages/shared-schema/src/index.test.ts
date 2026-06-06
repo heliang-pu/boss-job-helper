@@ -16,6 +16,7 @@ const bossJobPosting = {
   salaryText: "25-40K",
   experienceText: "3-5年",
   educationText: "本科",
+  industryText: "机器人",
   description: "负责机器人感知与控制算法开发",
   bossActiveText: "刚刚活跃",
   publishedText: "今日发布",
@@ -54,6 +55,7 @@ describe("shared schemas", () => {
 
     expect(parsed.source).toBe("boss");
     expect(parsed.city).toBe("上海");
+    expect(parsed.industryText).toBe("机器人");
   });
 
   it.each(["ftp://www.zhipin.com/job_detail/abc.html", "mailto:hr@example.com"])(
@@ -92,14 +94,17 @@ describe("shared schemas", () => {
     },
   );
 
-  it("rejects whitespace-only optional job posting strings when present", () => {
-    expect(() =>
-      JobPostingSchema.parse({
-        ...bossJobPosting,
-        experienceText: "  ",
-      }),
-    ).toThrow();
-  });
+  it.each(["experienceText", "educationText", "industryText", "bossActiveText", "publishedText"] as const)(
+    "rejects whitespace-only optional job posting field %s when present",
+    (field) => {
+      expect(() =>
+        JobPostingSchema.parse({
+          ...bossJobPosting,
+          [field]: "  ",
+        }),
+      ).toThrow();
+    },
+  );
 
   it("requires a positive match threshold", () => {
     expect(() =>

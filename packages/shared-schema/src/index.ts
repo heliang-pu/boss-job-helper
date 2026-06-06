@@ -21,6 +21,7 @@ export const JobPostingSchema = z.object({
   salaryText: nonBlankString,
   experienceText: optionalNonBlankString,
   educationText: optionalNonBlankString,
+  industryText: optionalNonBlankString,
   description: nonBlankString,
   bossActiveText: optionalNonBlankString,
   publishedText: optionalNonBlankString,
