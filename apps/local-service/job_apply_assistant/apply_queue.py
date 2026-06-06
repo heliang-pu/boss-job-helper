@@ -5,7 +5,7 @@ from datetime import date, datetime, timezone
 from job_apply_assistant.models import ApplyTask, SearchPreference
 
 
-ACTIONABLE_STATUSES = {"queued", "applying"}
+OPEN_STATUSES = {"pending_review", "queued", "applying", "needs_manual_action", "paused"}
 
 
 class ApplyQueue:
@@ -19,7 +19,7 @@ class ApplyQueue:
         if task.status != "queued":
             return
         if any(
-            existing.job.url == task.job.url and existing.status in ACTIONABLE_STATUSES
+            existing.job.url == task.job.url and existing.status in OPEN_STATUSES
             for existing in self.tasks
         ):
             return
@@ -45,6 +45,7 @@ class ApplyQueue:
         return None
 
     def mark_applied(self, task: ApplyTask, now: datetime | None = None) -> None:
+        self._ensure_task_belongs_to_queue(task)
         if task.status == "applied":
             return
         if task.status != "applying":
@@ -59,6 +60,7 @@ class ApplyQueue:
         self.applied_today += 1
 
     def mark_manual_action(self, task: ApplyTask, reason: str) -> None:
+        self._ensure_task_belongs_to_queue(task)
         if task.status != "applying":
             raise ValueError("only applying tasks can be marked for manual action")
 
@@ -82,6 +84,10 @@ class ApplyQueue:
         if self._applied_date != current_date:
             self.applied_today = 0
             self._applied_date = current_date
+
+    def _ensure_task_belongs_to_queue(self, task: ApplyTask) -> None:
+        if not any(existing is task for existing in self.tasks):
+            raise ValueError("task is not in this queue")
 
     def _utc_iso(self, value: datetime) -> str:
         if value.tzinfo is None:

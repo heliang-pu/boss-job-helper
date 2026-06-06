@@ -159,6 +159,34 @@ def test_enqueue_allows_queued_task_after_same_url_existing_task_is_applied() ->
     assert queue.next_task(make_preference(), inside_window_now()) is queued
 
 
+def test_enqueue_ignores_duplicate_when_existing_same_url_task_needs_manual_action() -> None:
+    queue = ApplyQueue()
+    job_url = "https://www.zhipin.com/job_detail/manual-dupe.html"
+    manual = make_task(url=job_url)
+    queue.enqueue(manual)
+    selected = queue.next_task(make_preference(), inside_window_now())
+    assert selected is manual
+    queue.mark_manual_action(manual, "需要人工确认")
+    queued = make_task(url=job_url)
+
+    queue.enqueue(queued)
+
+    assert queue.next_task(make_preference(), inside_window_now()) is None
+
+
+def test_enqueue_allows_queued_task_after_same_url_existing_task_is_filtered() -> None:
+    queue = ApplyQueue()
+    job_url = "https://www.zhipin.com/job_detail/filtered-retry.html"
+    filtered = make_task(url=job_url)
+    queue.enqueue(filtered)
+    filtered.status = "filtered"
+    queued = make_task(url=job_url)
+
+    queue.enqueue(queued)
+
+    assert queue.next_task(make_preference(), inside_window_now()) is queued
+
+
 def test_queue_pauses_outside_apply_window() -> None:
     queue = ApplyQueue()
     task = make_task()
@@ -205,6 +233,7 @@ def test_mark_manual_action_sets_status_failure_reason_and_pause_reason() -> Non
 def test_mark_manual_action_rejects_non_applying_task(status: str) -> None:
     queue = ApplyQueue()
     task = make_task()
+    queue.enqueue(task)
     task.status = status
 
     with pytest.raises(ValueError, match="applying"):
@@ -264,11 +293,38 @@ def test_mark_applied_is_idempotent_for_already_applied_task() -> None:
     assert task.applied_at == applied_at
 
 
+def test_mark_applied_rejects_external_applying_task_without_counting() -> None:
+    queue = ApplyQueue()
+    task = make_task()
+    task.status = "applying"
+
+    with pytest.raises(ValueError, match="queue"):
+        queue.mark_applied(task, now=inside_window_now())
+
+    assert task.status == "applying"
+    assert task.applied_at is None
+    assert queue.applied_today == 0
+
+
 @pytest.mark.parametrize("status", ["queued", "filtered", "needs_manual_action"])
 def test_mark_applied_rejects_non_applying_task(status: str) -> None:
     queue = ApplyQueue()
     task = make_task()
+    queue.enqueue(task)
     task.status = status
 
     with pytest.raises(ValueError, match="applying"):
         queue.mark_applied(task, now=inside_window_now())
+
+
+def test_mark_manual_action_rejects_external_applying_task_without_mutating() -> None:
+    queue = ApplyQueue()
+    task = make_task()
+    task.status = "applying"
+
+    with pytest.raises(ValueError, match="queue"):
+        queue.mark_manual_action(task, "需要人工确认")
+
+    assert task.status == "applying"
+    assert task.failure_reason is None
+    assert queue.pause_reason is None
