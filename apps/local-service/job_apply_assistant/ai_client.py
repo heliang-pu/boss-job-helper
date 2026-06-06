@@ -41,6 +41,8 @@ class AIConfig:
             value = raw_value.strip()
             if not value:
                 raise ValueError(f"{field_name} must not be empty")
+            if any(ord(character) < 33 or ord(character) > 126 for character in value):
+                raise ValueError(f"{field_name} must contain only visible ASCII characters")
             object.__setattr__(self, field_name, value)
 
         if not isinstance(self.base_url, str):
@@ -105,6 +107,7 @@ class AIClient:
 
     async def complete_json(self, system_prompt: str, payload: dict[str, Any]) -> dict[str, Any]:
         url = f"{self.config.base_url.rstrip('/')}/chat/completions"
+        transport_error: AIResponseError | None = None
         try:
             response = await self.http_client.post(
                 url,
@@ -122,15 +125,18 @@ class AIClient:
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
             status_code = exc.response.status_code
-            raise AIResponseError(
+            transport_error = AIResponseError(
                 f"AI HTTP error: status {status_code}",
                 status_code=status_code,
                 error_type="http_status",
-            ) from exc
-        except httpx.TimeoutException as exc:
-            raise AIResponseError("AI HTTP error: timeout", error_type="timeout") from exc
-        except httpx.HTTPError as exc:
-            raise AIResponseError("AI HTTP error: network", error_type="network") from exc
+            )
+        except httpx.TimeoutException:
+            transport_error = AIResponseError("AI HTTP error: timeout", error_type="timeout")
+        except httpx.HTTPError:
+            transport_error = AIResponseError("AI HTTP error: network", error_type="network")
+
+        if transport_error is not None:
+            raise transport_error
 
         try:
             content = response.json()["choices"][0]["message"]["content"]
