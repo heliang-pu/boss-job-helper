@@ -9,6 +9,9 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 from job_apply_assistant.models import JobPosting, MatchResult, ResumeProfile, SearchPreference
 
 
+MAX_MONTHLY_SALARY_K = 500
+
+
 class MatchingResponseError(RuntimeError):
     pass
 
@@ -155,9 +158,7 @@ class MatchingService:
         k_min_match = re.fullmatch(rf"(\d+)\s*K\s*以上{safe_suffix}", normalized, re.IGNORECASE)
         if k_min_match:
             salary_min = self._safe_int(k_min_match.group(1))
-            if salary_min is None:
-                return None
-            return salary_min, 1_000_000
+            return self._valid_salary_range(salary_min, MAX_MONTHLY_SALARY_K)
 
         return None
 
@@ -197,7 +198,11 @@ class MatchingService:
     def _valid_salary_range(self, salary_min: int | None, salary_max: int | None) -> tuple[int, int] | None:
         if salary_min is None or salary_max is None:
             return None
+        if salary_min <= 0 or salary_max <= 0:
+            return None
         if salary_min > salary_max:
+            return None
+        if salary_max > MAX_MONTHLY_SALARY_K:
             return None
         return salary_min, salary_max
 
