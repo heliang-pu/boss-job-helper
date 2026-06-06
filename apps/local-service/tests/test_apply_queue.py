@@ -129,6 +129,21 @@ def test_enqueue_ignores_non_queued_task_so_actionable_task_can_replace_same_url
     assert queue.next_task(make_preference(), inside_window_now()) is queued
 
 
+def test_enqueue_allows_queued_task_after_same_url_existing_task_is_applied() -> None:
+    queue = ApplyQueue()
+    job_url = "https://www.zhipin.com/job_detail/retry.html"
+    applied = make_task(url=job_url)
+    queue.enqueue(applied)
+    selected = queue.next_task(make_preference(), inside_window_now())
+    assert selected is applied
+    queue.mark_applied(applied, now=inside_window_now())
+    queued = make_task(url=job_url)
+
+    queue.enqueue(queued)
+
+    assert queue.next_task(make_preference(), inside_window_now()) is queued
+
+
 def test_queue_pauses_outside_apply_window() -> None:
     queue = ApplyQueue()
     task = make_task()
@@ -234,9 +249,11 @@ def test_mark_applied_is_idempotent_for_already_applied_task() -> None:
     assert task.applied_at == applied_at
 
 
-def test_mark_applied_rejects_queued_task() -> None:
+@pytest.mark.parametrize("status", ["queued", "filtered", "needs_manual_action"])
+def test_mark_applied_rejects_non_applying_task(status: str) -> None:
     queue = ApplyQueue()
     task = make_task()
+    task.status = status
 
     with pytest.raises(ValueError, match="applying"):
         queue.mark_applied(task, now=inside_window_now())

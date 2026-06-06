@@ -5,6 +5,9 @@ from datetime import date, datetime, timezone
 from job_apply_assistant.models import ApplyTask, SearchPreference
 
 
+ACTIONABLE_STATUSES = {"queued", "applying"}
+
+
 class ApplyQueue:
     def __init__(self) -> None:
         self.tasks: list[ApplyTask] = []
@@ -15,7 +18,10 @@ class ApplyQueue:
     def enqueue(self, task: ApplyTask) -> None:
         if task.status != "queued":
             return
-        if any(existing.job.url == task.job.url for existing in self.tasks):
+        if any(
+            existing.job.url == task.job.url and existing.status in ACTIONABLE_STATUSES
+            for existing in self.tasks
+        ):
             return
         self.tasks.append(task)
 
