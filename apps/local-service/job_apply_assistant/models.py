@@ -24,8 +24,14 @@ def require_non_blank_string(value: str) -> str:
     return cleaned
 
 
-class JobPosting(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
+class WireModel(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, strict=True)
+
+    def to_wire(self) -> dict[str, object]:
+        return self.model_dump(by_alias=True, exclude_none=True)
+
+
+class JobPosting(WireModel):
 
     source: Literal["boss"]
     url: str
@@ -52,9 +58,7 @@ class JobPosting(BaseModel):
         return require_non_blank_string(value)
 
 
-class SearchPreference(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
+class SearchPreference(WireModel):
     target_cities: list[str] = Field(alias="targetCities")
     keywords: list[str]
     salary_min_k: int = Field(alias="salaryMinK", gt=0)
@@ -89,9 +93,7 @@ class SearchPreference(BaseModel):
         return self
 
 
-class ResumeProfile(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
+class ResumeProfile(WireModel):
     id: str
     file_name: str = Field(alias="fileName")
     raw_text: str = Field(alias="rawText")
@@ -108,9 +110,7 @@ class ResumeProfile(BaseModel):
         return require_non_blank_string(value)
 
 
-class MatchResult(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
+class MatchResult(WireModel):
     passed_hard_filters: bool = Field(alias="passedHardFilters")
     hard_filter_reasons: list[str] = Field(alias="hardFilterReasons")
     score: int = Field(ge=0, le=100)
@@ -132,9 +132,7 @@ ApplyTaskStatus = Literal[
 ]
 
 
-class ApplyTask(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
+class ApplyTask(WireModel):
     id: str
     job: JobPosting
     status: ApplyTaskStatus

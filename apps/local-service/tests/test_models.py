@@ -30,6 +30,25 @@ def valid_search_preference_kwargs() -> dict[str, object]:
     }
 
 
+def valid_search_preference_wire_kwargs() -> dict[str, object]:
+    return {
+        "targetCities": ["上海"],
+        "keywords": ["机器人"],
+        "salaryMinK": 20,
+        "salaryMaxK": 45,
+        "blockedCompanies": [],
+        "blockedIndustries": [],
+        "recencyDays": 7,
+        "requireActiveBoss": True,
+        "matchThreshold": 80,
+        "dailyLimit": 20,
+        "applyWindowStart": "09:30",
+        "applyWindowEnd": "18:30",
+        "intervalMinSeconds": 90,
+        "intervalMaxSeconds": 240,
+    }
+
+
 def valid_job_posting_kwargs() -> dict[str, object]:
     return {
         "source": "boss",
@@ -56,6 +75,18 @@ def valid_match_result(*, should_queue: bool = True) -> MatchResult:
         greeting="您好，我有机器人项目经验，期待沟通。",
         should_queue=should_queue,
     )
+
+
+def valid_match_result_wire_kwargs() -> dict[str, object]:
+    return {
+        "passedHardFilters": True,
+        "hardFilterReasons": [],
+        "score": 86,
+        "reasons": ["项目经历匹配"],
+        "risks": [],
+        "greeting": "您好，我有机器人项目经验，期待沟通。",
+        "shouldQueue": True,
+    }
 
 
 def valid_resume_profile_kwargs() -> dict[str, object]:
@@ -117,6 +148,24 @@ def test_search_preference_rejects_blank_required_lists(field: str) -> None:
         SearchPreference(**{**valid_search_preference_kwargs(), field: ["  ", ""]})
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("salaryMinK", "20"), ("requireActiveBoss", "true"), ("matchThreshold", 80.0)],
+)
+def test_search_preference_rejects_coerced_scalar_inputs(field: str, value: object) -> None:
+    with pytest.raises(ValidationError):
+        SearchPreference(**{**valid_search_preference_wire_kwargs(), field: value})
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [{"score": "86"}, {"shouldQueue": "false"}],
+)
+def test_match_result_rejects_coerced_scalar_inputs(overrides: dict[str, object]) -> None:
+    with pytest.raises(ValidationError):
+        MatchResult(**{**valid_match_result_wire_kwargs(), **overrides})
+
+
 def test_models_accept_camel_case_shared_schema_payloads() -> None:
     job = JobPosting(
         source="boss",
@@ -168,6 +217,20 @@ def test_models_accept_camel_case_shared_schema_payloads() -> None:
     assert "educationText" not in payload["job"]
     assert "bossActiveText" not in payload["job"]
     assert "publishedText" not in payload["job"]
+    assert payload["match"]["shouldQueue"] is True
+
+
+def test_apply_task_to_wire_uses_aliases_and_omits_unset_optional_fields() -> None:
+    match = valid_match_result()
+
+    payload = ApplyTask.create(job=valid_job_posting(), match=match, greeting=match.greeting).to_wire()
+
+    assert "createdAt" in payload
+    assert "updatedAt" in payload
+    assert "failureReason" not in payload
+    assert "appliedAt" not in payload
+    assert payload["job"]["companyName"] == "示例科技"
+    assert "experienceText" not in payload["job"]
     assert payload["match"]["shouldQueue"] is True
 
 
