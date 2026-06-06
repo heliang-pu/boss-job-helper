@@ -1,4 +1,6 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+
+import pytest
 
 from job_apply_assistant.apply_queue import ApplyQueue
 from job_apply_assistant.models import ApplyTask, JobPosting, MatchResult, SearchPreference
@@ -69,11 +71,16 @@ def test_queue_returns_next_task_inside_window_and_marks_it_applying() -> None:
 
 def test_queue_pauses_after_daily_limit() -> None:
     queue = ApplyQueue()
-    queue.enqueue(make_task())
+    task = make_task()
+    queue.enqueue(task)
     preference = make_preference(daily_limit=1)
-    queue.applied_today = 1
+    now = inside_window_now()
+    selected = queue.next_task(preference, now)
+    assert selected is task
+    queue.mark_applied(selected, now=now)
+    queue.enqueue(make_task(url="https://www.zhipin.com/job_detail/limit.html"))
 
-    selected = queue.next_task(preference, inside_window_now())
+    selected = queue.next_task(preference, now)
 
     assert selected is None
     assert queue.pause_reason == "达到每日上限"
@@ -91,6 +98,18 @@ def test_queue_ignores_duplicate_enqueue_by_job_url() -> None:
     queue.mark_applied(selected)
 
     assert queue.next_task(make_preference(), inside_window_now()) is None
+
+
+def test_enqueue_ignores_non_queued_task_so_actionable_task_can_replace_same_url() -> None:
+    queue = ApplyQueue()
+    filtered = make_task(url="https://www.zhipin.com/job_detail/actionable.html")
+    filtered.status = "filtered"
+    queued = make_task(url="https://www.zhipin.com/job_detail/actionable.html")
+
+    queue.enqueue(filtered)
+    queue.enqueue(queued)
+
+    assert queue.next_task(make_preference(), inside_window_now()) is queued
 
 
 def test_queue_pauses_outside_apply_window() -> None:
@@ -132,11 +151,59 @@ def test_mark_manual_action_sets_status_failure_reason_and_pause_reason() -> Non
 def test_mark_applied_sets_utc_timestamps_and_increments_daily_count() -> None:
     queue = ApplyQueue()
     task = make_task()
+    queue.enqueue(task)
+    selected = queue.next_task(make_preference(), inside_window_now())
+    assert selected is task
 
-    queue.mark_applied(task)
+    queue.mark_applied(task, now=inside_window_now())
 
     assert task.status == "applied"
     assert task.applied_at is not None
     assert task.applied_at.endswith("Z")
     assert task.updated_at.endswith("Z")
     assert queue.applied_today == 1
+
+
+def test_daily_limit_resets_when_next_task_sees_new_day() -> None:
+    queue = ApplyQueue()
+    preference = make_preference(daily_limit=1)
+    first_day = inside_window_now()
+    second_day = first_day + timedelta(days=1)
+    first_task = make_task(url="https://www.zhipin.com/job_detail/day-1.html")
+    second_task = make_task(url="https://www.zhipin.com/job_detail/day-2.html")
+    queue.enqueue(first_task)
+    queue.enqueue(second_task)
+
+    selected = queue.next_task(preference, first_day)
+    assert selected is first_task
+    queue.mark_applied(selected, now=first_day)
+    assert queue.next_task(preference, first_day) is None
+
+    selected_next_day = queue.next_task(preference, second_day)
+
+    assert selected_next_day is second_task
+    assert selected_next_day.status == "applying"
+    assert queue.pause_reason is None
+
+
+def test_mark_applied_is_idempotent_for_already_applied_task() -> None:
+    queue = ApplyQueue()
+    task = make_task()
+    queue.enqueue(task)
+    selected = queue.next_task(make_preference(), inside_window_now())
+    assert selected is task
+
+    queue.mark_applied(task, now=inside_window_now())
+    applied_at = task.applied_at
+    queue.mark_applied(task, now=inside_window_now() + timedelta(minutes=5))
+
+    assert queue.applied_today == 1
+    assert task.applied_at == applied_at
+
+
+def test_mark_applied_rejects_queued_task() -> None:
+    queue = ApplyQueue()
+    task = make_task()
+
+    with pytest.raises(ValueError, match="applying"):
+        queue.mark_applied(task, now=inside_window_now())

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime, timezone
 
 from job_apply_assistant.models import ApplyTask, SearchPreference, utc_now_iso
 
@@ -9,15 +9,19 @@ class ApplyQueue:
     def __init__(self) -> None:
         self.tasks: list[ApplyTask] = []
         self.applied_today = 0
+        self._applied_date: date | None = None
         self.pause_reason: str | None = None
 
     def enqueue(self, task: ApplyTask) -> None:
+        if task.status != "queued":
+            return
         if any(existing.job.url == task.job.url for existing in self.tasks):
             return
         self.tasks.append(task)
 
     def next_task(self, preference: SearchPreference, now: datetime) -> ApplyTask | None:
         self.pause_reason = None
+        self._reset_daily_count_if_needed(now.date())
         if self.applied_today >= preference.daily_limit:
             self.pause_reason = "达到每日上限"
             return None
@@ -32,11 +36,18 @@ class ApplyQueue:
                 return task
         return None
 
-    def mark_applied(self, task: ApplyTask) -> None:
-        now = utc_now_iso()
+    def mark_applied(self, task: ApplyTask, now: datetime | None = None) -> None:
+        if task.status == "applied":
+            return
+        if task.status != "applying":
+            raise ValueError("only applying tasks can be marked as applied")
+
+        current_datetime = now or datetime.now(timezone.utc)
+        self._reset_daily_count_if_needed(current_datetime.date())
+        timestamp = self._utc_iso(current_datetime)
         task.status = "applied"
-        task.applied_at = now
-        task.updated_at = now
+        task.applied_at = timestamp
+        task.updated_at = timestamp
         self.applied_today += 1
 
     def mark_manual_action(self, task: ApplyTask, reason: str) -> None:
@@ -52,3 +63,16 @@ class ApplyQueue:
     def _inside_window(self, preference: SearchPreference, now: datetime) -> bool:
         current_time = now.strftime("%H:%M")
         return preference.apply_window_start <= current_time <= preference.apply_window_end
+
+    def _reset_daily_count_if_needed(self, current_date: date) -> None:
+        if self._applied_date is None:
+            self._applied_date = current_date
+            return
+        if self._applied_date != current_date:
+            self.applied_today = 0
+            self._applied_date = current_date
+
+    def _utc_iso(self, value: datetime) -> str:
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
