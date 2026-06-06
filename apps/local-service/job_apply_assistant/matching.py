@@ -253,8 +253,10 @@ class MatchingService:
             hours = self._safe_int(hour_match.group(1))
             return None if hours is None else hours <= 168
 
-        if re.fullmatch(r"\d+\s*分钟前活跃", normalized):
-            return True
+        minute_match = re.fullmatch(r"(\d+)\s*分钟前活跃", normalized)
+        if minute_match:
+            minutes = self._safe_int(minute_match.group(1))
+            return None if minutes is None else minutes <= 7 * 24 * 60
 
         active_words = {"刚刚活跃", "今日活跃", "今天活跃", "当前活跃", "在线", "刚刚在线", "本周活跃"}
         if normalized in active_words:

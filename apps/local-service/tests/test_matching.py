@@ -346,6 +346,8 @@ async def test_match_filters_by_published_recency(
         ({"bossActiveText": "未在线"}, "Boss 活跃度不满足"),
         ({"bossActiveText": "999小时前活跃"}, "Boss 活跃度不满足"),
         ({"bossActiveText": f"{'9' * 5000}小时前活跃"}, "Boss 活跃度无法解析"),
+        ({"bossActiveText": "10081分钟前活跃"}, "Boss 活跃度不满足"),
+        ({"bossActiveText": f"{'9' * 5000}分钟前活跃"}, "Boss 活跃度无法解析"),
         ({"bossActiveText": "很久没在线"}, "Boss 活跃度不满足"),
         ({"bossActiveText": "上月在线"}, "Boss 活跃度不满足"),
         ({"bossActiveText": "活跃状态未知"}, "Boss 活跃度无法解析"),
@@ -375,7 +377,10 @@ async def test_match_applies_direct_hard_filters(job_updates: dict, expected_rea
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("boss_active_text", ["1小时前活跃", "3日内活跃", "7日内活跃", "本周活跃"])
+@pytest.mark.parametrize(
+    "boss_active_text",
+    ["30分钟前活跃", "1小时前活跃", "3日内活跃", "7日内活跃", "本周活跃"],
+)
 async def test_match_accepts_recent_boss_active_texts(boss_active_text: str) -> None:
     job = JobPosting(
         source="boss",
