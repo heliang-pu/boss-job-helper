@@ -1,4 +1,8 @@
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener((details) => {
+  if (details.reason !== "install") {
+    return;
+  }
+
   chrome.storage.local.set({
     runtimeState: {
       status: "idle",
@@ -7,3 +11,5 @@ chrome.runtime.onInstalled.addListener(() => {
     },
   });
 });
+
+export {};
