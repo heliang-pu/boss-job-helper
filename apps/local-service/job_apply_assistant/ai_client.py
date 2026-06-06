@@ -38,6 +38,8 @@ class AIConfig:
                 raise ValueError(f"{field_name} must not be empty")
             object.__setattr__(self, field_name, value)
         parsed_base_url = urlparse(self.base_url)
+        if any(character.isspace() or ord(character) < 32 or ord(character) == 127 for character in self.base_url):
+            raise ValueError("base_url must not contain whitespace or control characters")
         if parsed_base_url.scheme not in {"http", "https"} or not parsed_base_url.netloc:
             raise ValueError("base_url must be an HTTP or HTTPS URL with a host")
         if self.timeout_seconds <= 0:
