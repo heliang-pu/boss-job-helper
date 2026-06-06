@@ -162,7 +162,7 @@ class MatchingService:
         if hours_match:
             hours = int(hours_match.group(1))
             return 0 if hours < 24 else (hours + 23) // 24
-        if normalized == "昨天":
+        if re.fullmatch(r"昨天(?:发布)?", normalized):
             return 1
         days_match = re.fullmatch(r"(\d+)\s*天前(?:发布)?", normalized)
         if days_match:

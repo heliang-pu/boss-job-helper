@@ -264,6 +264,8 @@ async def test_match_wraps_invalid_ai_match_output(ai_response: dict) -> None:
         ("47小时前发布", 1, False, "发布时间不满足"),
         ("不是今日发布", 1, False, "发布时间无法解析"),
         ("今日发布 30天前", 1, False, "发布时间无法解析"),
+        ("昨天发布", 1, True, None),
+        ("昨天发布 30天前", 1, False, "发布时间无法解析"),
         ("9999分钟前发布", 1, False, "发布时间不满足"),
         ("3天前", 3, True, None),
         ("30天前", 7, False, "发布时间不满足"),
