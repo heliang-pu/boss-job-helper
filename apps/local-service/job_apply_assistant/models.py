@@ -1,0 +1,128 @@
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from typing import Literal
+from uuid import uuid4
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+
+def utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+class JobPosting(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    source: Literal["boss"]
+    url: str
+    title: str
+    company_name: str = Field(alias="companyName")
+    city: str
+    salary_text: str = Field(alias="salaryText")
+    experience_text: str | None = Field(default=None, alias="experienceText")
+    education_text: str | None = Field(default=None, alias="educationText")
+    description: str
+    boss_active_text: str | None = Field(default=None, alias="bossActiveText")
+    published_text: str | None = Field(default=None, alias="publishedText")
+
+
+class SearchPreference(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    target_cities: list[str] = Field(alias="targetCities")
+    keywords: list[str]
+    salary_min_k: int = Field(alias="salaryMinK", gt=0)
+    salary_max_k: int = Field(alias="salaryMaxK", gt=0)
+    blocked_companies: list[str] = Field(alias="blockedCompanies")
+    blocked_industries: list[str] = Field(alias="blockedIndustries")
+    recency_days: int = Field(alias="recencyDays", gt=0)
+    require_active_boss: bool = Field(alias="requireActiveBoss")
+    match_threshold: int = Field(alias="matchThreshold", ge=1, le=100)
+    daily_limit: int = Field(alias="dailyLimit", gt=0)
+    apply_window_start: str = Field(alias="applyWindowStart")
+    apply_window_end: str = Field(alias="applyWindowEnd")
+    interval_min_seconds: int = Field(alias="intervalMinSeconds", gt=0)
+    interval_max_seconds: int = Field(alias="intervalMaxSeconds", gt=0)
+
+    @field_validator("target_cities", "keywords")
+    @classmethod
+    def require_non_empty_strings(cls, values: list[str]) -> list[str]:
+        cleaned = [value.strip() for value in values if value.strip()]
+        if not cleaned:
+            raise ValueError("list must contain at least one non-empty string")
+        return cleaned
+
+    @model_validator(mode="after")
+    def validate_ranges(self) -> SearchPreference:
+        if self.salary_min_k > self.salary_max_k:
+            raise ValueError("salary_min_k must be <= salary_max_k")
+        if self.interval_min_seconds > self.interval_max_seconds:
+            raise ValueError("interval_min_seconds must be <= interval_max_seconds")
+        return self
+
+
+class ResumeProfile(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str
+    file_name: str = Field(alias="fileName")
+    raw_text: str = Field(alias="rawText")
+    summary: str
+    skills: list[str]
+    years_of_experience: float = Field(alias="yearsOfExperience")
+    project_highlights: list[str] = Field(alias="projectHighlights")
+    education: list[str]
+    target_role_suggestions: list[str] = Field(alias="targetRoleSuggestions")
+
+
+class MatchResult(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    passed_hard_filters: bool = Field(alias="passedHardFilters")
+    hard_filter_reasons: list[str] = Field(alias="hardFilterReasons")
+    score: int = Field(ge=0, le=100)
+    reasons: list[str]
+    risks: list[str]
+    greeting: str
+    should_queue: bool = Field(alias="shouldQueue")
+
+
+ApplyTaskStatus = Literal[
+    "pending_review",
+    "queued",
+    "applying",
+    "applied",
+    "filtered",
+    "needs_manual_action",
+    "failed",
+    "paused",
+]
+
+
+class ApplyTask(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str
+    job: JobPosting
+    status: ApplyTaskStatus
+    match: MatchResult
+    greeting: str
+    failure_reason: str | None = Field(default=None, alias="failureReason")
+    created_at: str = Field(alias="createdAt")
+    updated_at: str = Field(alias="updatedAt")
+    applied_at: str | None = Field(default=None, alias="appliedAt")
+
+    @classmethod
+    def create(cls, job: JobPosting, match: MatchResult, greeting: str) -> ApplyTask:
+        now = utc_now_iso()
+        status: ApplyTaskStatus = "queued" if match.should_queue else "filtered"
+        return cls(
+            id=f"task_{uuid4().hex}",
+            job=job,
+            status=status,
+            match=match,
+            greeting=greeting,
+            createdAt=now,
+            updatedAt=now,
+        )
