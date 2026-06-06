@@ -86,6 +86,11 @@ class MatchingService:
             inactive_words = ["本月活跃", "很久没活跃", "半年前活跃"]
             if any(word in job.boss_active_text for word in inactive_words):
                 reasons.append("Boss 活跃度不满足")
+        published_days = self._parse_published_days(job.published_text)
+        if published_days is None:
+            reasons.append("发布时间无法解析")
+        elif published_days > preference.recency_days:
+            reasons.append("发布时间不满足")
         salary_range = self._parse_salary_range(job.salary_text)
         if salary_range is None:
             reasons.append("薪资无法解析")
@@ -98,16 +103,32 @@ class MatchingService:
 
     def _parse_salary_range(self, salary_text: str) -> tuple[int, int] | None:
         normalized = salary_text.strip()
+        wan_range_match = re.search(r"(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)\s*万", normalized)
+        if wan_range_match:
+            return self._wan_to_k(wan_range_match.group(1)), self._wan_to_k(wan_range_match.group(2))
+
         k_range_match = re.search(r"(\d+)\s*K?\s*-\s*(\d+)\s*K", normalized, re.IGNORECASE)
         if k_range_match:
             return int(k_range_match.group(1)), int(k_range_match.group(2))
-
-        wan_range_match = re.search(r"(\d+)\s*-\s*(\d+)\s*万", normalized)
-        if wan_range_match:
-            return int(wan_range_match.group(1)) * 10, int(wan_range_match.group(2)) * 10
 
         k_min_match = re.search(r"(\d+)\s*K\s*以上", normalized, re.IGNORECASE)
         if k_min_match:
             return int(k_min_match.group(1)), 1_000_000
 
         return None
+
+    def _parse_published_days(self, published_text: str | None) -> int | None:
+        if published_text is None:
+            return None
+        normalized = published_text.strip()
+        if any(word in normalized for word in ["刚刚发布", "今日发布", "今天发布"]):
+            return 0
+        if "昨天" in normalized:
+            return 1
+        days_match = re.search(r"(\d+)\s*天前", normalized)
+        if days_match:
+            return int(days_match.group(1))
+        return None
+
+    def _wan_to_k(self, value: str) -> int:
+        return int(float(value) * 10)

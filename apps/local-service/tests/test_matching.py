@@ -89,6 +89,7 @@ async def test_match_filters_blocked_company_before_ai_call() -> None:
         city="上海",
         salaryText="25-40K",
         description="ROS Python 机器人控制",
+        publishedText="今日发布",
     )
 
     ai_client = FakeAIClient()
@@ -107,6 +108,7 @@ async def test_match_filters_blocked_company_before_ai_call() -> None:
         ("25-40K", True, None),
         ("25K-40K", True, None),
         ("2-4万", True, None),
+        ("2.5-4万", True, None),
         ("20K以上", True, None),
         ("10-15K", False, "薪资范围不匹配"),
         ("薪资面议", False, "薪资无法解析"),
@@ -123,6 +125,7 @@ async def test_match_filters_common_salary_formats(
         city="上海",
         salaryText=salary_text,
         description="ROS Python 机器人控制",
+        publishedText="今日发布",
     )
     ai_client = FakeAIClient()
 
@@ -149,6 +152,7 @@ async def test_match_ignores_blank_blocked_company_entries() -> None:
         city="上海",
         salaryText="25-40K",
         description="ROS Python 机器人控制",
+        publishedText="今日发布",
     )
     ai_client = FakeAIClient()
 
@@ -177,7 +181,81 @@ async def test_match_wraps_invalid_ai_match_output(ai_response: dict) -> None:
         city="上海",
         salaryText="25-40K",
         description="ROS Python 机器人控制",
+        publishedText="今日发布",
     )
 
     with pytest.raises(MatchingResponseError, match="Invalid AI match response"):
         await MatchingService(FakeAIClient(ai_response)).match(job, make_resume(), make_preference())
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("published_text", "recency_days", "should_queue", "expected_reason"),
+    [
+        ("今日发布", 1, True, None),
+        ("刚刚发布", 1, True, None),
+        ("3天前", 3, True, None),
+        ("30天前", 7, False, "发布时间不满足"),
+        ("未知发布", 7, False, "发布时间无法解析"),
+        (None, 7, False, "发布时间无法解析"),
+    ],
+)
+async def test_match_filters_by_published_recency(
+    published_text: str | None, recency_days: int, should_queue: bool, expected_reason: str | None
+) -> None:
+    preference = make_preference()
+    preference.recency_days = recency_days
+    job_kwargs = {
+        "source": "boss",
+        "url": "https://www.zhipin.com/job_detail/5.html",
+        "title": "机器人软件工程师",
+        "companyName": "示例科技",
+        "city": "上海",
+        "salaryText": "25-40K",
+        "description": "ROS Python 机器人控制",
+    }
+    if published_text is not None:
+        job_kwargs["publishedText"] = published_text
+    job = JobPosting(**job_kwargs)
+    ai_client = FakeAIClient()
+
+    result = await MatchingService(ai_client).match(job, make_resume(), preference)
+
+    assert result.should_queue is should_queue
+    if expected_reason is None:
+        assert result.hard_filter_reasons == []
+        assert ai_client.calls == 1
+    else:
+        assert expected_reason in result.hard_filter_reasons
+        assert ai_client.calls == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("job_updates", "expected_reason"),
+    [
+        ({"city": "北京"}, "城市不匹配"),
+        ({"title": "后端工程师", "description": "Java 服务端开发"}, "岗位关键词不匹配"),
+        ({"bossActiveText": "很久没活跃"}, "Boss 活跃度不满足"),
+    ],
+)
+async def test_match_applies_direct_hard_filters(job_updates: dict, expected_reason: str) -> None:
+    job_data = {
+        "source": "boss",
+        "url": "https://www.zhipin.com/job_detail/6.html",
+        "title": "机器人软件工程师",
+        "companyName": "示例科技",
+        "city": "上海",
+        "salaryText": "25-40K",
+        "description": "ROS Python 机器人控制",
+        "bossActiveText": "刚刚活跃",
+        "publishedText": "今日发布",
+    }
+    job_data.update(job_updates)
+    ai_client = FakeAIClient()
+
+    result = await MatchingService(ai_client).match(JobPosting(**job_data), make_resume(), make_preference())
+
+    assert result.should_queue is False
+    assert expected_reason in result.hard_filter_reasons
+    assert ai_client.calls == 0
