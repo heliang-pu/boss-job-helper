@@ -28,4 +28,21 @@ describe("BossAdapter", () => {
       },
     ]);
   });
+
+  it("skips job cards missing required fields such as the description", () => {
+    document.body.innerHTML = `
+      <section class="job-card-wrapper">
+        <a class="job-card-left" href="/job_detail/missing-desc.html">
+          <span class="job-name">机器人软件工程师</span>
+          <span class="job-area">上海</span>
+          <span class="salary">25-40K</span>
+        </a>
+        <div class="company-name">示例科技</div>
+      </section>
+    `;
+
+    const jobs = new BossAdapter(document).extractListJobs();
+
+    expect(jobs).toEqual([]);
+  });
 });

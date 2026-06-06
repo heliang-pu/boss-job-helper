@@ -27,7 +27,7 @@ export class BossAdapter {
     const tags = Array.from(card.querySelectorAll(".tag-list li")).map((item) =>
       item.textContent?.replace(/\s+/g, " ").trim(),
     );
-    const description = text(card, ".job-desc") ?? title;
+    const description = text(card, ".job-desc");
 
     if (!link?.href || !title || !city || !salaryText || !companyName || !description) {
       return null;
