@@ -9,6 +9,8 @@ from job_apply_assistant.api import MatchServiceFactory, create_api_router
 
 
 EXTRA_FIELD_LOC_PLACEHOLDER = "<extra>"
+SECRET_LOC_PLACEHOLDER = "<secret>"
+SECRET_LOC_SEGMENTS = {"apiKey", "api_key"}
 
 
 def _sanitize_validation_loc(error: dict[str, object]) -> object:
@@ -16,7 +18,9 @@ def _sanitize_validation_loc(error: dict[str, object]) -> object:
     if not isinstance(loc, (list, tuple)):
         return loc
 
-    sanitized_loc = list(loc)
+    sanitized_loc = [
+        SECRET_LOC_PLACEHOLDER if segment in SECRET_LOC_SEGMENTS else segment for segment in loc
+    ]
     if error.get("type") == "extra_forbidden" and sanitized_loc:
         sanitized_loc[-1] = EXTRA_FIELD_LOC_PLACEHOLDER
     return sanitized_loc

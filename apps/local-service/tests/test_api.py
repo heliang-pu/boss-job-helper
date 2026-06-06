@@ -257,6 +257,48 @@ def test_match_validation_errors_do_not_echo_extra_field_names() -> None:
     assert '"input"' not in response.text
 
 
+@pytest.mark.parametrize(
+    ("config_key", "config_payload"),
+    [
+        (
+            "aiConfig",
+            {
+                "baseUrl": "https://api.example.com/v1",
+                "apiKey": {"secret": "value"},
+                "model": "test-model",
+                "timeoutSeconds": 12.5,
+            },
+        ),
+        (
+            "ai_config",
+            {
+                "base_url": "https://api.example.com/v1",
+                "api_key": {"secret": "value"},
+                "model": "test-model",
+                "timeout_seconds": 12.5,
+            },
+        ),
+    ],
+)
+def test_match_validation_errors_redact_ai_config_key_locations(
+    config_key: str,
+    config_payload: dict[str, object],
+) -> None:
+    client = TestClient(create_app())
+    payload = make_match_payload()
+    payload.pop("aiConfig")
+    payload[config_key] = config_payload
+
+    response = client.post("/match", json=payload)
+
+    assert response.status_code == 422
+    assert "apiKey" not in response.text
+    assert "api_key" not in response.text
+    assert '"input"' not in response.text
+    detail = response.json()["detail"]
+    assert any("<secret>" in error["loc"] for error in detail)
+
+
 def test_chrome_extension_cors_preflight_is_allowed() -> None:
     client = TestClient(create_app())
 
