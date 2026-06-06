@@ -2,8 +2,16 @@ import { JobPosting, JobPostingSchema } from "@job-apply-assistant/shared-schema
 
 const BOSS_ORIGIN = "https://www.zhipin.com";
 
+function normalizeText(value: string | null | undefined): string | undefined {
+  return value?.replace(/\s+/g, " ").trim() || undefined;
+}
+
+function trimToUndefined(value: string | null | undefined): string | undefined {
+  return value?.trim() || undefined;
+}
+
 function text(root: ParentNode, selector: string): string | undefined {
-  return root.querySelector(selector)?.textContent?.replace(/\s+/g, " ").trim() || undefined;
+  return normalizeText(root.querySelector(selector)?.textContent);
 }
 
 function absoluteBossUrl(href: string): string {
@@ -20,23 +28,28 @@ export class BossAdapter {
 
   private extractCard(card: Element): JobPosting | null {
     const link = card.querySelector<HTMLAnchorElement>(".job-card-left");
-    const href = link?.getAttribute("href")?.trim() || undefined;
+    const href = trimToUndefined(link?.getAttribute("href"));
     const title = text(card, ".job-name");
     const city = text(card, ".job-area");
     const salaryText = text(card, ".salary");
     const companyName = text(card, ".company-name");
-    const tags = Array.from(card.querySelectorAll(".tag-list li")).map((item) =>
-      item.textContent?.replace(/\s+/g, " ").trim(),
-    );
+    const tags = Array.from(card.querySelectorAll(".tag-list li")).map((item) => normalizeText(item.textContent));
     const description = text(card, ".job-desc");
 
     if (!href || !title || !city || !salaryText || !companyName || !description) {
       return null;
     }
 
-    return JobPostingSchema.parse({
+    let url: string;
+    try {
+      url = absoluteBossUrl(href);
+    } catch {
+      return null;
+    }
+
+    const parsedJob = JobPostingSchema.safeParse({
       source: "boss",
-      url: absoluteBossUrl(href),
+      url,
       title,
       companyName,
       city,
@@ -47,6 +60,7 @@ export class BossAdapter {
       bossActiveText: text(card, ".boss-online-tag"),
       publishedText: text(card, ".job-pub-time"),
     });
+    return parsedJob.success ? parsedJob.data : null;
   }
 
   detectBlockingCondition(): string | null {
