@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass
+from numbers import Real
 from typing import Any
 from urllib.parse import urlparse
 
@@ -33,6 +35,8 @@ class AIConfig:
             raw_value = getattr(self, field_name)
             if not isinstance(raw_value, str):
                 raise ValueError(f"{field_name} must be a string")
+            if any(ord(character) < 32 or ord(character) == 127 for character in raw_value):
+                raise ValueError(f"{field_name} must not contain control characters")
             value = raw_value.strip()
             if not value:
                 raise ValueError(f"{field_name} must not be empty")
@@ -42,15 +46,30 @@ class AIConfig:
             raise ValueError("base_url must be a string")
         if not self.base_url:
             raise ValueError("base_url must not be empty")
-        if any(character.isspace() or ord(character) < 32 or ord(character) == 127 for character in self.base_url):
+        if any(
+            character.isspace() or ord(character) < 32 or ord(character) == 127 for character in self.base_url
+        ):
             raise ValueError("base_url must not contain whitespace or control characters")
         parsed_base_url = urlparse(self.base_url)
         try:
             parsed_base_url.port
         except ValueError as exc:
             raise ValueError("base_url must be a valid HTTP or HTTPS URL") from exc
+        if (
+            parsed_base_url.query
+            or parsed_base_url.fragment
+            or parsed_base_url.username
+            or parsed_base_url.password
+        ):
+            raise ValueError("base_url must not contain query, fragment, or userinfo")
         if parsed_base_url.scheme not in {"http", "https"} or not parsed_base_url.hostname:
             raise ValueError("base_url must be an HTTP or HTTPS URL with a host")
+        if (
+            isinstance(self.timeout_seconds, bool)
+            or not isinstance(self.timeout_seconds, Real)
+            or not math.isfinite(self.timeout_seconds)
+        ):
+            raise ValueError("timeout_seconds must be a finite number")
         if self.timeout_seconds <= 0:
             raise ValueError("timeout_seconds must be positive")
 

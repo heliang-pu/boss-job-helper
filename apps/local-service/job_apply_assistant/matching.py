@@ -126,13 +126,18 @@ class MatchingService:
 
     def _parse_salary_range(self, salary_text: str) -> tuple[int, int] | None:
         normalized = salary_text.strip()
+        if "年薪" in normalized or re.search(r"万\s*/\s*年", normalized):
+            return None
         wan_range_match = re.search(r"(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)\s*万", normalized)
         if wan_range_match:
-            return self._wan_to_k(wan_range_match.group(1)), self._wan_to_k(wan_range_match.group(2))
+            return self._valid_salary_range(
+                self._wan_to_k(wan_range_match.group(1)),
+                self._wan_to_k(wan_range_match.group(2)),
+            )
 
         k_range_match = re.search(r"(\d+)\s*K?\s*-\s*(\d+)\s*K", normalized, re.IGNORECASE)
         if k_range_match:
-            return int(k_range_match.group(1)), int(k_range_match.group(2))
+            return self._valid_salary_range(int(k_range_match.group(1)), int(k_range_match.group(2)))
 
         k_min_match = re.search(r"(\d+)\s*K\s*以上", normalized, re.IGNORECASE)
         if k_min_match:
@@ -146,8 +151,12 @@ class MatchingService:
         normalized = published_text.strip()
         if any(word in normalized for word in ["刚刚发布", "今日发布", "今天发布"]):
             return 0
-        if re.search(r"\d+\s*(?:分钟|小时)前(?:发布)?", normalized):
+        if re.search(r"\d+\s*分钟前(?:发布)?", normalized):
             return 0
+        hours_match = re.search(r"(\d+)\s*小时前(?:发布)?", normalized)
+        if hours_match:
+            hours = int(hours_match.group(1))
+            return (hours + 23) // 24
         if "昨天" in normalized:
             return 1
         days_match = re.search(r"(\d+)\s*天前", normalized)
@@ -157,6 +166,11 @@ class MatchingService:
 
     def _wan_to_k(self, value: str) -> int:
         return int(float(value) * 10)
+
+    def _valid_salary_range(self, salary_min: int, salary_max: int) -> tuple[int, int] | None:
+        if salary_min > salary_max:
+            return None
+        return salary_min, salary_max
 
     def _city_matches(self, job_city: str, target_cities: list[str]) -> bool:
         normalized_job_city = self._normalize_city(job_city)
@@ -177,8 +191,15 @@ class MatchingService:
         if any(word in normalized for word in inactive_words):
             return False
 
+        day_match = re.search(r"(\d+)\s*日内活跃", normalized)
+        if day_match:
+            return int(day_match.group(1)) <= 7
+
         active_words = ["刚刚活跃", "今日活跃", "今天活跃", "当前活跃", "在线", "刚刚在线"]
         if any(word in normalized for word in active_words):
+            return True
+
+        if re.search(r"\d+\s*(?:分钟|小时)前活跃", normalized) or "本周活跃" in normalized:
             return True
 
         return None

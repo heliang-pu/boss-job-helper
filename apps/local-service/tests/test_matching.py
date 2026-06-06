@@ -142,6 +142,9 @@ async def test_match_filters_blocked_company_before_ai_call() -> None:
         ("2.5-4万", True, None),
         ("20K以上", True, None),
         ("10-15K", False, "薪资范围不匹配"),
+        ("40-25K", False, "薪资无法解析"),
+        ("30-50万/年", False, "薪资无法解析"),
+        ("年薪30-50万", False, "薪资无法解析"),
         ("薪资面议", False, "薪资无法解析"),
     ],
 )
@@ -239,6 +242,10 @@ async def test_match_wraps_invalid_ai_match_output(ai_response: dict) -> None:
         ("30分钟前", 1, True, None),
         ("1小时前发布", 1, True, None),
         ("1小时前", 1, True, None),
+        ("23小时前发布", 1, True, None),
+        ("24小时前发布", 1, True, None),
+        ("25小时前发布", 1, False, "发布时间不满足"),
+        ("47小时前发布", 1, False, "发布时间不满足"),
         ("3天前", 3, True, None),
         ("30天前", 7, False, "发布时间不满足"),
         ("未知发布", 7, False, "发布时间无法解析"),
@@ -307,3 +314,26 @@ async def test_match_applies_direct_hard_filters(job_updates: dict, expected_rea
     assert result.should_queue is False
     assert expected_reason in result.hard_filter_reasons
     assert ai_client.calls == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("boss_active_text", ["1小时前活跃", "3日内活跃", "7日内活跃", "本周活跃"])
+async def test_match_accepts_recent_boss_active_texts(boss_active_text: str) -> None:
+    job = JobPosting(
+        source="boss",
+        url="https://www.zhipin.com/job_detail/8.html",
+        title="机器人软件工程师",
+        companyName="示例科技",
+        city="上海",
+        salaryText="25-40K",
+        description="ROS Python 机器人控制",
+        bossActiveText=boss_active_text,
+        publishedText="今日发布",
+    )
+    ai_client = FakeAIClient()
+
+    result = await MatchingService(ai_client).match(job, make_resume(), make_preference())
+
+    assert result.should_queue is True
+    assert result.hard_filter_reasons == []
+    assert ai_client.calls == 1
