@@ -597,7 +597,7 @@ Run:
 ```bash
 npm install
 npm --workspace packages/shared-schema test
-npm --workspace packages/shared-schema build
+npm --workspace packages/shared-schema run build
 ```
 
 Expected: PASS.
@@ -2444,7 +2444,7 @@ npm --workspace apps/extension test
 Build:
 
 ```bash
-npm --workspace apps/extension build
+npm --workspace apps/extension run build
 ```
 
 Load the built extension from `apps/extension/dist` in Chrome or Edge developer mode.
@@ -2500,7 +2500,7 @@ Expected: PASS.
 
 - [ ] **Step 5: Run extension build**
 
-Run: `npm --workspace apps/extension build`
+Run: `npm --workspace apps/extension run build`
 
 Expected: PASS and create `apps/extension/dist`.
 
@@ -2523,9 +2523,9 @@ Run these commands before claiming the MVP foundation is complete:
 git status --short
 node --test tests/repo_layout.test.mjs
 npm --workspace packages/shared-schema test
-npm --workspace packages/shared-schema build
+npm --workspace packages/shared-schema run build
 npm --workspace apps/extension test
-npm --workspace apps/extension build
+npm --workspace apps/extension run build
 cd apps/local-service && python -m pytest -q
 ```
 
