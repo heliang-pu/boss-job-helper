@@ -203,7 +203,7 @@ def test_models_accept_camel_case_shared_schema_payloads() -> None:
     )
 
     task = ApplyTask.create(job=job, match=match, greeting=match.greeting)
-    payload = task.model_dump(by_alias=True, exclude_none=True)
+    payload = task.to_wire()
 
     assert job.company_name == "示例科技"
     assert preference.salary_min_k == 20

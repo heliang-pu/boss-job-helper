@@ -1,25 +1,37 @@
 import { z } from "zod";
 
+const nonBlankString = z.string().trim().min(1);
+const optionalNonBlankString = nonBlankString.optional();
+const httpUrlString = z
+  .string()
+  .trim()
+  .min(1)
+  .url()
+  .refine((value) => {
+    const protocol = new URL(value).protocol;
+    return protocol === "http:" || protocol === "https:";
+  }, "URL must use HTTP(S)");
+
 export const JobPostingSchema = z.object({
   source: z.literal("boss"),
-  url: z.string().url(),
-  title: z.string().min(1),
-  companyName: z.string().min(1),
-  city: z.string().min(1),
-  salaryText: z.string().min(1),
-  experienceText: z.string().optional(),
-  educationText: z.string().optional(),
-  description: z.string().min(1),
-  bossActiveText: z.string().optional(),
-  publishedText: z.string().optional(),
+  url: httpUrlString,
+  title: nonBlankString,
+  companyName: nonBlankString,
+  city: nonBlankString,
+  salaryText: nonBlankString,
+  experienceText: optionalNonBlankString,
+  educationText: optionalNonBlankString,
+  description: nonBlankString,
+  bossActiveText: optionalNonBlankString,
+  publishedText: optionalNonBlankString,
 });
 
 export type JobPosting = z.infer<typeof JobPostingSchema>;
 
 export const SearchPreferenceSchema = z
   .object({
-    targetCities: z.array(z.string().min(1)).min(1),
-    keywords: z.array(z.string().min(1)).min(1),
+    targetCities: z.array(nonBlankString).min(1),
+    keywords: z.array(nonBlankString).min(1),
     salaryMinK: z.number().int().positive(),
     salaryMaxK: z.number().int().positive(),
     blockedCompanies: z.array(z.string()),
@@ -46,9 +58,9 @@ export const SearchPreferenceSchema = z
 export type SearchPreference = z.infer<typeof SearchPreferenceSchema>;
 
 export const ResumeProfileSchema = z.object({
-  id: z.string().min(1),
-  fileName: z.string().min(1),
-  rawText: z.string().min(1),
+  id: nonBlankString,
+  fileName: nonBlankString,
+  rawText: nonBlankString,
   summary: z.string(),
   skills: z.array(z.string()),
   yearsOfExperience: z.number().nonnegative(),
@@ -85,12 +97,12 @@ export const ApplyTaskStatusSchema = z.enum([
 export type ApplyTaskStatus = z.infer<typeof ApplyTaskStatusSchema>;
 
 export const ApplyTaskSchema = z.object({
-  id: z.string().min(1),
+  id: nonBlankString,
   job: JobPostingSchema,
   status: ApplyTaskStatusSchema,
   match: MatchResultSchema,
-  greeting: z.string(),
-  failureReason: z.string().optional(),
+  greeting: nonBlankString,
+  failureReason: optionalNonBlankString,
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
   appliedAt: z.string().datetime().optional(),

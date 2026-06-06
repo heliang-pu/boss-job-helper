@@ -56,6 +56,39 @@ describe("shared schemas", () => {
     expect(parsed.city).toBe("上海");
   });
 
+  it.each(["ftp://www.zhipin.com/job_detail/abc.html", "mailto:hr@example.com"])(
+    "rejects non-HTTP Boss job URLs",
+    (url) => {
+      expect(() =>
+        JobPostingSchema.parse({
+          ...bossJobPosting,
+          url,
+        }),
+      ).toThrow();
+    },
+  );
+
+  it.each(["url", "title", "companyName", "city", "salaryText", "description"] as const)(
+    "rejects whitespace-only job posting field %s",
+    (field) => {
+      expect(() =>
+        JobPostingSchema.parse({
+          ...bossJobPosting,
+          [field]: "  ",
+        }),
+      ).toThrow();
+    },
+  );
+
+  it("rejects whitespace-only optional job posting strings when present", () => {
+    expect(() =>
+      JobPostingSchema.parse({
+        ...bossJobPosting,
+        experienceText: "  ",
+      }),
+    ).toThrow();
+  });
+
   it("requires a positive match threshold", () => {
     expect(() =>
       SearchPreferenceSchema.parse({
@@ -113,6 +146,15 @@ describe("shared schemas", () => {
     ).toThrow("intervalMinSeconds must be <= intervalMaxSeconds");
   });
 
+  it.each(["targetCities", "keywords"] as const)("rejects whitespace-only search preference %s", (field) => {
+    expect(() =>
+      SearchPreferenceSchema.parse({
+        ...validSearchPreference,
+        [field]: ["  "],
+      }),
+    ).toThrow();
+  });
+
   it("validates a resume profile", () => {
     const profile = ResumeProfileSchema.parse({
       id: "resume_1",
@@ -130,6 +172,26 @@ describe("shared schemas", () => {
     expect(profile.yearsOfExperience).toBe(4);
   });
 
+  it.each(["id", "fileName", "rawText"] as const)(
+    "rejects whitespace-only resume profile field %s",
+    (field) => {
+      expect(() =>
+        ResumeProfileSchema.parse({
+          id: "resume_1",
+          fileName: "resume.pdf",
+          rawText: "机器人算法工程师，负责感知与控制项目。",
+          summary: "机器人算法背景，具备项目落地经验。",
+          skills: ["TypeScript", "Python", "机器人控制"],
+          yearsOfExperience: 4,
+          projectHighlights: ["移动机器人路径规划", "机械臂控制"],
+          education: ["本科"],
+          targetRoleSuggestions: ["机器人算法工程师"],
+          [field]: "  ",
+        }),
+      ).toThrow();
+    },
+  );
+
   it("validates match result and apply task state", () => {
     const match = MatchResultSchema.parse(matchResult);
 
@@ -145,6 +207,23 @@ describe("shared schemas", () => {
 
     expect(task.status).toBe("queued");
     expect(task.job.url).toBe("https://www.zhipin.com/job_detail/abc.html");
+  });
+
+  it.each(["id", "greeting"] as const)("rejects whitespace-only apply task field %s", (field) => {
+    const match = MatchResultSchema.parse(matchResult);
+
+    expect(() =>
+      ApplyTaskSchema.parse({
+        id: "task_1",
+        job: bossJobPosting,
+        status: "queued",
+        match,
+        greeting: match.greeting,
+        createdAt: "2026-06-06T10:00:00.000Z",
+        updatedAt: "2026-06-06T10:00:00.000Z",
+        [field]: "  ",
+      }),
+    ).toThrow();
   });
 
   it("rejects legacy apply tasks with only a job URL", () => {
