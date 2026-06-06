@@ -1,8 +1,18 @@
 import { createRoot } from "react-dom/client";
 import { FloatingPanel } from "./FloatingPanel";
 
-const container = document.createElement("div");
-container.id = "job-apply-assistant-floating-panel";
-document.body.appendChild(container);
+export const FLOATING_PANEL_CONTAINER_ID = "job-apply-assistant-floating-panel";
 
-createRoot(container).render(<FloatingPanel />);
+export function mountFloatingPanel(doc: Document = document) {
+  if (doc.getElementById(FLOATING_PANEL_CONTAINER_ID)) {
+    return;
+  }
+
+  const container = doc.createElement("div");
+  container.id = FLOATING_PANEL_CONTAINER_ID;
+  doc.body.appendChild(container);
+
+  createRoot(container).render(<FloatingPanel />);
+}
+
+mountFloatingPanel();
