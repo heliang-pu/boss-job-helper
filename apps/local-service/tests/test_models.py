@@ -327,6 +327,22 @@ def test_apply_task_rejects_empty_required_strings(field: str) -> None:
         ApplyTask(**task_kwargs)
 
 
+def test_apply_task_rejects_empty_failure_reason_when_present() -> None:
+    match = valid_match_result()
+
+    with pytest.raises(ValidationError):
+        ApplyTask(
+            id="task_1",
+            job=valid_job_posting(),
+            status="queued",
+            match=match,
+            greeting=match.greeting,
+            failureReason="  ",
+            createdAt="2026-06-06T00:00:00Z",
+            updatedAt="2026-06-06T00:00:00Z",
+        )
+
+
 @pytest.mark.parametrize("field", ["createdAt", "updatedAt", "appliedAt"])
 def test_apply_task_rejects_invalid_datetimes(field: str) -> None:
     match = valid_match_result()

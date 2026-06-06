@@ -164,6 +164,11 @@ class ApplyTask(WireModel):
     def require_core_strings(cls, value: str) -> str:
         return require_non_blank_string(value)
 
+    @field_validator("failure_reason")
+    @classmethod
+    def require_optional_strings(cls, value: str | None) -> str | None:
+        return require_optional_non_blank_string(value)
+
     @field_validator("created_at", "updated_at", "applied_at")
     @classmethod
     def validate_datetime_string(cls, value: str | None) -> str | None:
