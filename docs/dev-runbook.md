@@ -61,6 +61,6 @@ Before testing on Boss 直聘:
 
 - Confirm the local service is running on `127.0.0.1:8765`.
 - Confirm service health with the `/health` curl check above. If using a build with wired health UI, confirm the extension shows service health; the current MVP UI may still show static status text.
-- Confirm daily limit and interval settings are conservative before enabling automated actions.
-- Confirm pause works from the floating panel and Popup before any live run.
+- Confirm default daily-limit and interval behavior through the service model and queue tests. When settings UI is wired, manually confirm conservative settings before live use.
+- Do not perform live automated actions until pause controls are wired to handlers and manually verified; the current floating panel and Popup buttons are static MVP UI.
 - Stop immediately if a captcha, login prompt, account warning, or unknown dialog appears.

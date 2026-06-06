@@ -1,6 +1,6 @@
 # Boss 直聘自动求职助手
 
-Chrome/Edge 扩展 + 本地 FastAPI 服务，用于根据 PDF/DOCX 简历匹配 Boss 直聘岗位，并执行可控的自动沟通/投递流程。
+Chrome/Edge 扩展 + 本地 FastAPI 服务，用于本地解析 PDF/DOCX 简历、匹配 Boss 直聘岗位，并为后续可控沟通/投递流程提供队列与安全边界。
 
 ## Safety Boundary
 
