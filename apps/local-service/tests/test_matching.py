@@ -1,7 +1,7 @@
 import pytest
 
 from job_apply_assistant.matching import MatchingResponseError, MatchingService
-from job_apply_assistant.models import JobPosting, ResumeProfile, SearchPreference
+from job_apply_assistant.models import ApplyTask, JobPosting, ResumeProfile, SearchPreference
 
 
 class FakeAIClient:
@@ -140,6 +140,8 @@ async def test_match_filters_blocked_company_before_ai_call() -> None:
     assert result.should_queue is False
     assert "公司在黑名单中" in result.hard_filter_reasons
     assert ai_client.calls == 0
+    task = ApplyTask.create(job=job, match=result, greeting=result.greeting)
+    assert task.status == "filtered"
 
 
 @pytest.mark.asyncio
@@ -260,6 +262,9 @@ async def test_match_wraps_invalid_ai_match_output(ai_response: dict) -> None:
         ("24小时前发布", 1, True, None),
         ("25小时前发布", 1, False, "发布时间不满足"),
         ("47小时前发布", 1, False, "发布时间不满足"),
+        ("不是今日发布", 1, False, "发布时间无法解析"),
+        ("今日发布 30天前", 1, False, "发布时间无法解析"),
+        ("9999分钟前发布", 1, False, "发布时间不满足"),
         ("3天前", 3, True, None),
         ("30天前", 7, False, "发布时间不满足"),
         ("未知发布", 7, False, "发布时间无法解析"),
@@ -307,6 +312,9 @@ async def test_match_filters_by_published_recency(
         ({"bossActiveText": "不在线"}, "Boss 活跃度不满足"),
         ({"bossActiveText": "当前不在线"}, "Boss 活跃度不满足"),
         ({"bossActiveText": "未在线"}, "Boss 活跃度不满足"),
+        ({"bossActiveText": "999小时前活跃"}, "Boss 活跃度不满足"),
+        ({"bossActiveText": "很久没在线"}, "Boss 活跃度不满足"),
+        ({"bossActiveText": "上月在线"}, "Boss 活跃度不满足"),
         ({"bossActiveText": "活跃状态未知"}, "Boss 活跃度无法解析"),
         ({"bossActiveText": None}, "Boss 活跃度无法解析"),
     ],

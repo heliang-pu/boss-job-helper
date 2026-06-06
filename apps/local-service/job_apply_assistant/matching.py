@@ -65,7 +65,7 @@ class MatchingService:
                 score=0,
                 reasons=[],
                 risks=[],
-                greeting="",
+                greeting="未通过硬性筛选",
                 shouldQueue=False,
             )
 
@@ -152,17 +152,19 @@ class MatchingService:
         if published_text is None:
             return None
         normalized = published_text.strip()
-        if any(word in normalized for word in ["刚刚发布", "今日发布", "今天发布"]):
+        if normalized in {"刚刚发布", "今日发布", "今天发布"}:
             return 0
-        if re.search(r"\d+\s*分钟前(?:发布)?", normalized):
-            return 0
-        hours_match = re.search(r"(\d+)\s*小时前(?:发布)?", normalized)
+        minutes_match = re.fullmatch(r"(\d+)\s*分钟前(?:发布)?", normalized)
+        if minutes_match:
+            minutes = int(minutes_match.group(1))
+            return 0 if minutes < 1440 else (minutes + 1439) // 1440
+        hours_match = re.fullmatch(r"(\d+)\s*小时前(?:发布)?", normalized)
         if hours_match:
             hours = int(hours_match.group(1))
-            return (hours + 23) // 24
-        if "昨天" in normalized:
+            return 0 if hours < 24 else (hours + 23) // 24
+        if normalized == "昨天":
             return 1
-        days_match = re.search(r"(\d+)\s*天前", normalized)
+        days_match = re.fullmatch(r"(\d+)\s*天前(?:发布)?", normalized)
         if days_match:
             return int(days_match.group(1))
         return None
@@ -194,19 +196,34 @@ class MatchingService:
         if not normalized:
             return None
 
-        inactive_words = ["本月活跃", "很久没活跃", "半年前活跃", "不活跃", "不在线", "当前不在线", "未在线"]
+        inactive_words = [
+            "本月活跃",
+            "很久没活跃",
+            "半年前活跃",
+            "不活跃",
+            "不在线",
+            "当前不在线",
+            "未在线",
+            "很久没在线",
+            "上月在线",
+            "离线",
+        ]
         if any(word in normalized for word in inactive_words):
             return False
 
-        day_match = re.search(r"(\d+)\s*日内活跃", normalized)
+        day_match = re.fullmatch(r"(\d+)\s*日内活跃", normalized)
         if day_match:
             return int(day_match.group(1)) <= 7
 
-        active_words = ["刚刚活跃", "今日活跃", "今天活跃", "当前活跃", "在线", "刚刚在线"]
-        if any(word in normalized for word in active_words):
+        hour_match = re.fullmatch(r"(\d+)\s*小时前活跃", normalized)
+        if hour_match:
+            return int(hour_match.group(1)) <= 168
+
+        if re.fullmatch(r"\d+\s*分钟前活跃", normalized):
             return True
 
-        if re.search(r"\d+\s*(?:分钟|小时)前活跃", normalized) or "本周活跃" in normalized:
+        active_words = {"刚刚活跃", "今日活跃", "今天活跃", "当前活跃", "在线", "刚刚在线", "本周活跃"}
+        if normalized in active_words:
             return True
 
         return None
