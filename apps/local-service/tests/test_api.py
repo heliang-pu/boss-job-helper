@@ -241,7 +241,20 @@ def test_match_validation_errors_do_not_leak_ai_config_secret() -> None:
 
     assert response.status_code == 422
     assert "secret-key" not in response.text
-    assert "input" not in response.text
+    assert '"input"' not in response.text
+
+
+def test_match_validation_errors_do_not_echo_extra_field_names() -> None:
+    client = TestClient(create_app())
+    payload = make_match_payload()
+    assert isinstance(payload["aiConfig"], dict)
+    payload["aiConfig"]["secret-value-as-field"] = "x"
+
+    response = client.post("/match", json=payload)
+
+    assert response.status_code == 422
+    assert "secret-value-as-field" not in response.text
+    assert '"input"' not in response.text
 
 
 def test_chrome_extension_cors_preflight_is_allowed() -> None:
@@ -252,6 +265,7 @@ def test_chrome_extension_cors_preflight_is_allowed() -> None:
         headers={
             "Origin": "chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type",
         },
     )
 

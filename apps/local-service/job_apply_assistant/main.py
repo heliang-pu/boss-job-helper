@@ -8,12 +8,26 @@ from fastapi.exceptions import RequestValidationError
 from job_apply_assistant.api import MatchServiceFactory, create_api_router
 
 
+EXTRA_FIELD_LOC_PLACEHOLDER = "<extra>"
+
+
+def _sanitize_validation_loc(error: dict[str, object]) -> object:
+    loc = error.get("loc")
+    if not isinstance(loc, (list, tuple)):
+        return loc
+
+    sanitized_loc = list(loc)
+    if error.get("type") == "extra_forbidden" and sanitized_loc:
+        sanitized_loc[-1] = EXTRA_FIELD_LOC_PLACEHOLDER
+    return sanitized_loc
+
+
 def _sanitize_validation_error(error: dict[str, object]) -> dict[str, object]:
     sanitized_error: dict[str, object] = {}
     if "type" in error:
         sanitized_error["type"] = error["type"]
     if "loc" in error:
-        sanitized_error["loc"] = list(error["loc"]) if isinstance(error["loc"], tuple) else error["loc"]
+        sanitized_error["loc"] = _sanitize_validation_loc(error)
     if "msg" in error:
         sanitized_error["msg"] = error["msg"]
     return sanitized_error
@@ -37,8 +51,8 @@ def create_app(match_service_factory: MatchServiceFactory | None = None) -> Fast
         allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
         allow_origin_regex=r"^chrome-extension://[a-p]{32}$",
         allow_credentials=False,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST"],
+        allow_headers=["content-type"],
     )
     app.include_router(create_api_router(match_service_factory=match_service_factory))
     return app
