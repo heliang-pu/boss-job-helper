@@ -4,14 +4,23 @@ from datetime import datetime, timezone
 from typing import Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, TypeAdapter, field_validator, model_validator
 
 
 APPLY_WINDOW_PATTERN = r"^([01]\d|2[0-3]):[0-5]\d$"
+DATETIME_ADAPTER = TypeAdapter(datetime)
+HTTP_URL_ADAPTER = TypeAdapter(AnyHttpUrl)
 
 
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def require_non_blank_string(value: str) -> str:
+    cleaned = value.strip()
+    if not cleaned:
+        raise ValueError("string must not be empty")
+    return cleaned
 
 
 class JobPosting(BaseModel):
@@ -28,6 +37,18 @@ class JobPosting(BaseModel):
     description: str
     boss_active_text: str | None = Field(default=None, alias="bossActiveText")
     published_text: str | None = Field(default=None, alias="publishedText")
+
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls, value: str) -> str:
+        cleaned = require_non_blank_string(value)
+        HTTP_URL_ADAPTER.validate_python(cleaned)
+        return cleaned
+
+    @field_validator("title", "company_name", "city", "salary_text", "description")
+    @classmethod
+    def require_core_strings(cls, value: str) -> str:
+        return require_non_blank_string(value)
 
 
 class SearchPreference(BaseModel):
@@ -75,10 +96,15 @@ class ResumeProfile(BaseModel):
     raw_text: str = Field(alias="rawText")
     summary: str
     skills: list[str]
-    years_of_experience: float = Field(alias="yearsOfExperience")
+    years_of_experience: float = Field(alias="yearsOfExperience", ge=0)
     project_highlights: list[str] = Field(alias="projectHighlights")
     education: list[str]
     target_role_suggestions: list[str] = Field(alias="targetRoleSuggestions")
+
+    @field_validator("id", "file_name", "raw_text")
+    @classmethod
+    def require_core_strings(cls, value: str) -> str:
+        return require_non_blank_string(value)
 
 
 class MatchResult(BaseModel):
@@ -117,6 +143,19 @@ class ApplyTask(BaseModel):
     created_at: str = Field(alias="createdAt")
     updated_at: str = Field(alias="updatedAt")
     applied_at: str | None = Field(default=None, alias="appliedAt")
+
+    @field_validator("id", "greeting")
+    @classmethod
+    def require_core_strings(cls, value: str) -> str:
+        return require_non_blank_string(value)
+
+    @field_validator("created_at", "updated_at", "applied_at")
+    @classmethod
+    def validate_datetime_string(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        DATETIME_ADAPTER.validate_python(value)
+        return value
 
     @classmethod
     def create(cls, job: JobPosting, match: MatchResult, greeting: str) -> ApplyTask:
