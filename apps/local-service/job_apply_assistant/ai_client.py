@@ -36,14 +36,11 @@ class AIConfig:
             raw_value = getattr(self, field_name)
             if not isinstance(raw_value, str):
                 raise ValueError(f"{field_name} must be a string")
-            if any(ord(character) < 32 or ord(character) == 127 for character in raw_value):
-                raise ValueError(f"{field_name} must not contain control characters")
-            value = raw_value.strip()
-            if not value:
+            if not raw_value:
                 raise ValueError(f"{field_name} must not be empty")
-            if any(ord(character) < 33 or ord(character) > 126 for character in value):
+            if any(ord(character) < 33 or ord(character) > 126 for character in raw_value):
                 raise ValueError(f"{field_name} must contain only visible ASCII characters")
-            object.__setattr__(self, field_name, value)
+            object.__setattr__(self, field_name, raw_value)
 
         if not isinstance(self.base_url, str):
             raise ValueError("base_url must be a string")
