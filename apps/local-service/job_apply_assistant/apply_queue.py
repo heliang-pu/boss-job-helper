@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from job_apply_assistant.models import ApplyTask, SearchPreference
 
@@ -13,6 +13,7 @@ class ApplyQueue:
         self.tasks: list[ApplyTask] = []
         self.applied_today = 0
         self._applied_date: date | None = None
+        self._last_applied_at: datetime | None = None
         self.pause_reason: str | None = None
 
     def enqueue(self, task: ApplyTask) -> None:
@@ -27,7 +28,8 @@ class ApplyQueue:
 
     def next_task(self, preference: SearchPreference, now: datetime) -> ApplyTask | None:
         self.pause_reason = None
-        self._reset_daily_count_if_needed(now.date())
+        current_datetime = self._utc_datetime(now)
+        self._reset_daily_count_if_needed(current_datetime.date())
         if self.applied_today >= preference.daily_limit:
             self.pause_reason = "达到每日上限"
             return None
@@ -36,13 +38,19 @@ class ApplyQueue:
             return None
         if any(task.status == "applying" for task in self.tasks):
             return None
+        queued_task = next((task for task in self.tasks if task.status == "queued"), None)
+        if queued_task is None:
+            return None
+        if (
+            self._last_applied_at is not None
+            and current_datetime - self._last_applied_at < timedelta(seconds=preference.interval_min_seconds)
+        ):
+            self.pause_reason = "距离上次投递时间过短"
+            return None
 
-        for task in self.tasks:
-            if task.status == "queued":
-                task.status = "applying"
-                task.updated_at = self._utc_iso(now)
-                return task
-        return None
+        queued_task.status = "applying"
+        queued_task.updated_at = self._utc_iso(current_datetime)
+        return queued_task
 
     def mark_applied(self, task: ApplyTask, now: datetime | None = None) -> None:
         self._ensure_task_belongs_to_queue(task)
@@ -51,13 +59,14 @@ class ApplyQueue:
         if task.status != "applying":
             raise ValueError("only applying tasks can be marked as applied")
 
-        current_datetime = now or datetime.now(timezone.utc)
+        current_datetime = self._utc_datetime(now or datetime.now(timezone.utc))
         self._reset_daily_count_if_needed(current_datetime.date())
         timestamp = self._utc_iso(current_datetime)
         task.status = "applied"
         task.applied_at = timestamp
         task.updated_at = timestamp
         self.applied_today += 1
+        self._last_applied_at = current_datetime
 
     def mark_manual_action(self, task: ApplyTask, reason: str) -> None:
         self._ensure_task_belongs_to_queue(task)
@@ -90,6 +99,9 @@ class ApplyQueue:
             raise ValueError("task is not in this queue")
 
     def _utc_iso(self, value: datetime) -> str:
+        return self._utc_datetime(value).isoformat().replace("+00:00", "Z")
+
+    def _utc_datetime(self, value: datetime) -> datetime:
         if value.tzinfo is None:
             value = value.replace(tzinfo=timezone.utc)
-        return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+        return value.astimezone(timezone.utc)

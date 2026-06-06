@@ -11,6 +11,8 @@ def make_preference(
     daily_limit: int = 20,
     apply_window_start: str = "09:30",
     apply_window_end: str = "18:30",
+    interval_min_seconds: int = 90,
+    interval_max_seconds: int = 240,
 ) -> SearchPreference:
     return SearchPreference(
         targetCities=["上海"],
@@ -25,8 +27,8 @@ def make_preference(
         dailyLimit=daily_limit,
         applyWindowStart=apply_window_start,
         applyWindowEnd=apply_window_end,
-        intervalMinSeconds=90,
-        intervalMaxSeconds=240,
+        intervalMinSeconds=interval_min_seconds,
+        intervalMaxSeconds=interval_max_seconds,
     )
 
 
@@ -86,6 +88,44 @@ def test_queue_pauses_after_daily_limit() -> None:
     assert queue.pause_reason == "达到每日上限"
 
 
+def test_next_task_pauses_until_min_interval_after_mark_applied() -> None:
+    queue = ApplyQueue()
+    preference = make_preference(interval_min_seconds=90)
+    first = make_task(url="https://www.zhipin.com/job_detail/interval-1.html")
+    second = make_task(url="https://www.zhipin.com/job_detail/interval-2.html")
+    queue.enqueue(first)
+    queue.enqueue(second)
+    now = inside_window_now()
+    selected = queue.next_task(preference, now)
+    assert selected is first
+
+    queue.mark_applied(first, now=now)
+    selected_too_soon = queue.next_task(preference, now)
+
+    assert selected_too_soon is None
+    assert second.status == "queued"
+    assert queue.pause_reason == "距离上次投递时间过短"
+
+
+def test_next_task_dispatches_when_min_interval_has_elapsed() -> None:
+    queue = ApplyQueue()
+    preference = make_preference(interval_min_seconds=90)
+    first = make_task(url="https://www.zhipin.com/job_detail/interval-elapsed-1.html")
+    second = make_task(url="https://www.zhipin.com/job_detail/interval-elapsed-2.html")
+    queue.enqueue(first)
+    queue.enqueue(second)
+    now = inside_window_now()
+    selected = queue.next_task(preference, now)
+    assert selected is first
+
+    queue.mark_applied(first, now=now)
+    selected_after_interval = queue.next_task(preference, now + timedelta(seconds=90))
+
+    assert selected_after_interval is second
+    assert second.status == "applying"
+    assert queue.pause_reason is None
+
+
 def test_next_task_blocks_dispatch_while_another_task_is_applying() -> None:
     queue = ApplyQueue()
     preference = make_preference(daily_limit=1)
@@ -129,7 +169,7 @@ def test_enqueue_ignores_duplicate_when_existing_same_url_task_is_applying() -> 
     queue.enqueue(duplicate)
     queue.mark_applied(applying, now=inside_window_now())
 
-    assert queue.next_task(make_preference(), inside_window_now()) is None
+    assert queue.next_task(make_preference(), inside_window_now() + timedelta(seconds=90)) is None
 
 
 def test_enqueue_ignores_non_queued_task_so_actionable_task_can_replace_same_url() -> None:
@@ -156,7 +196,7 @@ def test_enqueue_allows_queued_task_after_same_url_existing_task_is_applied() ->
 
     queue.enqueue(queued)
 
-    assert queue.next_task(make_preference(), inside_window_now()) is queued
+    assert queue.next_task(make_preference(), inside_window_now() + timedelta(seconds=90)) is queued
 
 
 def test_enqueue_ignores_duplicate_when_existing_same_url_task_needs_manual_action() -> None:
@@ -287,10 +327,12 @@ def test_mark_applied_is_idempotent_for_already_applied_task() -> None:
 
     queue.mark_applied(task, now=inside_window_now())
     applied_at = task.applied_at
+    last_applied_at = queue._last_applied_at
     queue.mark_applied(task, now=inside_window_now() + timedelta(minutes=5))
 
     assert queue.applied_today == 1
     assert task.applied_at == applied_at
+    assert queue._last_applied_at == last_applied_at
 
 
 def test_mark_applied_rejects_external_applying_task_without_counting() -> None:
