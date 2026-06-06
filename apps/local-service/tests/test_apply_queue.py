@@ -214,6 +214,39 @@ def test_enqueue_ignores_duplicate_when_existing_same_url_task_needs_manual_acti
     assert queue.next_task(make_preference(), inside_window_now()) is None
 
 
+def test_manual_action_blocks_following_tasks_until_resolved() -> None:
+    queue = ApplyQueue()
+    manual = make_task(url="https://www.zhipin.com/job_detail/manual-block.html")
+    queued = make_task(url="https://www.zhipin.com/job_detail/manual-following.html")
+    queue.enqueue(manual)
+    queue.enqueue(queued)
+    selected = queue.next_task(make_preference(), inside_window_now())
+    assert selected is manual
+
+    queue.mark_manual_action(manual, "需要人工确认")
+    selected_after_manual_action = queue.next_task(make_preference(), inside_window_now())
+
+    assert selected_after_manual_action is None
+    assert queued.status == "queued"
+    assert queue.pause_reason == "需要人工确认"
+
+
+def test_paused_task_blocks_following_tasks_until_resolved() -> None:
+    queue = ApplyQueue()
+    paused = make_task(url="https://www.zhipin.com/job_detail/paused-block.html")
+    queued = make_task(url="https://www.zhipin.com/job_detail/paused-following.html")
+    queue.enqueue(paused)
+    queue.enqueue(queued)
+    paused.status = "paused"
+    paused.failure_reason = "用户暂停"
+
+    selected = queue.next_task(make_preference(), inside_window_now())
+
+    assert selected is None
+    assert queued.status == "queued"
+    assert queue.pause_reason == "用户暂停"
+
+
 def test_enqueue_allows_queued_task_after_same_url_existing_task_is_filtered() -> None:
     queue = ApplyQueue()
     job_url = "https://www.zhipin.com/job_detail/filtered-retry.html"

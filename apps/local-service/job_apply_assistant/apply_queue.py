@@ -30,6 +30,10 @@ class ApplyQueue:
         self.pause_reason = None
         current_datetime = self._utc_datetime(now)
         self._reset_daily_count_if_needed(current_datetime.date())
+        blocking_pause_reason = self._blocking_pause_reason()
+        if blocking_pause_reason is not None:
+            self.pause_reason = blocking_pause_reason
+            return None
         if self.applied_today >= preference.daily_limit:
             self.pause_reason = "达到每日上限"
             return None
@@ -93,6 +97,12 @@ class ApplyQueue:
         if self._applied_date != current_date:
             self.applied_today = 0
             self._applied_date = current_date
+
+    def _blocking_pause_reason(self) -> str | None:
+        for task in self.tasks:
+            if task.status in {"needs_manual_action", "paused"}:
+                return task.failure_reason or "存在需要人工处理的任务"
+        return None
 
     def _ensure_task_belongs_to_queue(self, task: ApplyTask) -> None:
         if not any(existing is task for existing in self.tasks):
