@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.vite/
+.pytest_cache/
+__pycache__/
+*.pyc
+.ruff_cache/
+.coverage
+.env
+.env.*
+!.env.example
+local-data/
+.superpowers/

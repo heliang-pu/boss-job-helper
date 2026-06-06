@@ -1,0 +1,30 @@
+[project]
+name = "job-apply-assistant-local-service"
+version = "0.1.0"
+description = "Local FastAPI service for resume parsing, AI matching, and apply queue management."
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115.0",
+  "uvicorn[standard]>=0.32.0",
+  "pydantic>=2.10.0",
+  "httpx>=0.28.0",
+  "pypdf>=5.1.0",
+  "python-docx>=1.1.2"
+]
+
+[project.optional-dependencies]
+test = [
+  "pytest>=8.3.0",
+  "pytest-cov>=6.0.0",
+  "reportlab>=4.2.0"
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 110
+
+[tool.ruff.format]
+quote-style = "double"

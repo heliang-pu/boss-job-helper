@@ -1,0 +1,19 @@
+{
+  "name": "job-apply-assistant",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/extension",
+    "packages/shared-schema"
+  ],
+  "scripts": {
+    "test": "npm run test --workspaces --if-present && node --test tests/repo_layout.test.mjs",
+    "test:repo": "node --test tests/repo_layout.test.mjs",
+    "build": "npm run build --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0"
+  }
+}
