@@ -38,6 +38,9 @@ class ResumeParser:
             raise ValueError(f"Unsupported resume file type: {file_type}")
 
         cleaned = self._normalize_text(text)
+        if not cleaned:
+            raise ValueError("No extractable resume text found")
+
         skills = [skill for skill in SKILL_KEYWORDS if skill.lower() in cleaned.lower()]
 
         return ResumeProfile(
@@ -68,11 +71,13 @@ class ResumeParser:
         return re.sub(r"\s+", " ", text).strip()
 
     def _extract_years(self, text: str) -> float:
-        match = re.search(r"(\d+(?:\.\d+)?)\s*(?:年|years?|yrs?)\b", text, flags=re.IGNORECASE)
+        match = re.search(r"(\d+(?:\.\d+)?)\s*年", text)
+        if not match:
+            match = re.search(r"(\d+(?:\.\d+)?)\s*(?:years?|yrs?)\b", text, flags=re.IGNORECASE)
         return float(match.group(1)) if match else 0.0
 
     def _extract_project_highlights(self, text: str) -> list[str]:
-        sentences = re.split(r"[。.!?]", text)
+        sentences = re.split(r"(?<!\d)[。.!?](?!\d)", text)
         return [
             sentence.strip()
             for sentence in sentences

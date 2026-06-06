@@ -70,6 +70,24 @@ def test_parse_docx_resume_table_text(tmp_path: Path) -> None:
     assert profile.education == ["Bachelor"]
 
 
+def test_parse_chinese_years_followed_by_experience_text(tmp_path: Path) -> None:
+    path = tmp_path / "resume.docx"
+    write_docx(path, "拥有3年机器人项目经验 Python ROS")
+
+    profile = ResumeParser().parse(path)
+
+    assert profile.years_of_experience == 3.0
+
+
+def test_parse_chinese_decimal_years_followed_by_project_text(tmp_path: Path) -> None:
+    path = tmp_path / "resume.docx"
+    write_docx(path, "拥有3.5年项目经验 Python ROS")
+
+    profile = ResumeParser().parse(path)
+
+    assert profile.years_of_experience == 3.5
+
+
 def test_parse_pdf_resume(tmp_path: Path) -> None:
     path = tmp_path / "resume.pdf"
     write_pdf(path, "Li Engineer Python Robot Control project Master 4 yrs")
@@ -93,6 +111,18 @@ def test_reject_unsupported_file(tmp_path: Path) -> None:
         assert "Unsupported resume file type" in str(exc)
     else:
         raise AssertionError("unsupported file should raise ValueError")
+
+
+def test_reject_empty_docx_resume(tmp_path: Path) -> None:
+    path = tmp_path / "resume.docx"
+    write_docx(path, "")
+
+    try:
+        ResumeParser().parse(path)
+    except ValueError as exc:
+        assert "No extractable resume text found" in str(exc)
+    else:
+        raise AssertionError("empty resume should raise ValueError")
 
 
 def test_reject_file_without_extension(tmp_path: Path) -> None:
