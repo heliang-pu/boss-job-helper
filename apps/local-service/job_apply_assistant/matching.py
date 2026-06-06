@@ -13,7 +13,7 @@ class MatchingResponseError(RuntimeError):
 
 
 class AIMatchResponse(BaseModel):
-    model_config = ConfigDict(strict=True)
+    model_config = ConfigDict(strict=True, extra="forbid")
 
     score: int = Field(ge=0, le=100)
     reasons: list[str]
@@ -73,7 +73,7 @@ class MatchingService:
 
     def _hard_filter(self, job: JobPosting, preference: SearchPreference) -> list[str]:
         reasons: list[str] = []
-        if job.city not in preference.target_cities:
+        if not self._city_matches(job.city, preference.target_cities):
             reasons.append("城市不匹配")
         blocked_companies = [blocked.strip() for blocked in preference.blocked_companies if blocked.strip()]
         if any(blocked in job.company_name for blocked in blocked_companies):
@@ -82,9 +82,11 @@ class MatchingService:
             keyword.lower() in f"{job.title} {job.description}".lower() for keyword in preference.keywords
         ):
             reasons.append("岗位关键词不匹配")
-        if preference.require_active_boss and job.boss_active_text:
-            inactive_words = ["本月活跃", "很久没活跃", "半年前活跃"]
-            if any(word in job.boss_active_text for word in inactive_words):
+        if preference.require_active_boss:
+            boss_is_active = self._parse_boss_active(job.boss_active_text)
+            if boss_is_active is None:
+                reasons.append("Boss 活跃度无法解析")
+            elif not boss_is_active:
                 reasons.append("Boss 活跃度不满足")
         published_days = self._parse_published_days(job.published_text)
         if published_days is None:
@@ -132,3 +134,28 @@ class MatchingService:
 
     def _wan_to_k(self, value: str) -> int:
         return int(float(value) * 10)
+
+    def _city_matches(self, job_city: str, target_cities: list[str]) -> bool:
+        normalized_job_city = self._normalize_city(job_city)
+        return any(normalized_job_city == self._normalize_city(target_city) for target_city in target_cities)
+
+    def _normalize_city(self, city: str) -> str:
+        primary_city = re.split(r"[·\s]+", city.strip(), maxsplit=1)[0]
+        return primary_city.removesuffix("市")
+
+    def _parse_boss_active(self, boss_active_text: str | None) -> bool | None:
+        if boss_active_text is None:
+            return None
+        normalized = boss_active_text.strip()
+        if not normalized:
+            return None
+
+        inactive_words = ["本月活跃", "很久没活跃", "半年前活跃", "不活跃"]
+        if any(word in normalized for word in inactive_words):
+            return False
+
+        active_words = ["刚刚活跃", "今日活跃", "今天活跃", "当前活跃", "在线", "刚刚在线"]
+        if any(word in normalized for word in active_words):
+            return True
+
+        return None

@@ -6,6 +6,25 @@ import pytest
 from job_apply_assistant.ai_client import AIClient, AIConfig, AIResponseError
 
 
+@pytest.mark.parametrize(
+    "config_kwargs",
+    [
+        {"base_url": "", "api_key": "secret", "model": "test-model"},
+        {"base_url": "https://api.example.com/v1", "api_key": " ", "model": "test-model"},
+        {"base_url": "https://api.example.com/v1", "api_key": "secret", "model": ""},
+        {
+            "base_url": "https://api.example.com/v1",
+            "api_key": "secret",
+            "model": "test-model",
+            "timeout_seconds": 0,
+        },
+    ],
+)
+def test_ai_config_rejects_invalid_values(config_kwargs: dict) -> None:
+    with pytest.raises(ValueError):
+        AIConfig(**config_kwargs)
+
+
 @pytest.mark.asyncio
 async def test_chat_completion_uses_openai_compatible_endpoint() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
@@ -106,3 +125,40 @@ async def test_complete_json_wraps_bad_ai_responses(response_json: dict) -> None
 
         with pytest.raises(AIResponseError, match="Invalid AI response"):
             await client.complete_json("分析岗位", {"title": "机器人算法工程师"})
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status_code", [401, 429])
+async def test_complete_json_wraps_http_status_errors_without_leaking_api_key(status_code: int) -> None:
+    transport = httpx.MockTransport(lambda request: httpx.Response(status_code, request=request))
+
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = AIClient(
+            AIConfig(base_url="https://api.example.com/v1", api_key="secret", model="test-model"),
+            http_client=http_client,
+        )
+
+        with pytest.raises(AIResponseError, match=f"AI HTTP error: status {status_code}") as exc_info:
+            await client.complete_json("分析岗位", {"title": "机器人算法工程师"})
+
+    assert exc_info.value.status_code == status_code
+    assert exc_info.value.error_type == "http_status"
+    assert "secret" not in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_complete_json_wraps_timeout_errors() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectTimeout("timed out", request=request)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        client = AIClient(
+            AIConfig(base_url="https://api.example.com/v1", api_key="secret", model="test-model"),
+            http_client=http_client,
+        )
+
+        with pytest.raises(AIResponseError, match="AI HTTP error: timeout") as exc_info:
+            await client.complete_json("分析岗位", {"title": "机器人算法工程师"})
+
+    assert exc_info.value.status_code is None
+    assert exc_info.value.error_type == "timeout"

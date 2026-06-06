@@ -7,6 +7,7 @@ from job_apply_assistant.models import JobPosting, ResumeProfile, SearchPreferen
 class FakeAIClient:
     def __init__(self, response: dict | None = None) -> None:
         self.calls = 0
+        self.last_payload: dict | None = None
         self.response = (
             response
             if response is not None
@@ -20,6 +21,7 @@ class FakeAIClient:
 
     async def complete_json(self, system_prompt: str, payload: dict) -> dict:
         self.calls += 1
+        self.last_payload = payload
         return self.response
 
 
@@ -77,6 +79,35 @@ async def test_match_passes_when_hard_filters_and_ai_score_pass() -> None:
     assert result.should_queue is True
     assert result.score == 88
     assert ai_client.calls == 1
+    assert ai_client.last_payload is not None
+    assert "companyName" in ai_client.last_payload["job"]
+    assert "company_name" not in ai_client.last_payload["job"]
+    assert "experienceText" not in ai_client.last_payload["job"]
+    assert "fileName" in ai_client.last_payload["resume"]
+    assert "file_name" not in ai_client.last_payload["resume"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("city", ["上海·浦东新区", " 上海 浦东新区 "])
+async def test_match_accepts_district_level_city_matches(city: str) -> None:
+    job = JobPosting(
+        source="boss",
+        url="https://www.zhipin.com/job_detail/7.html",
+        title="机器人软件工程师",
+        companyName="示例科技",
+        city=city,
+        salaryText="25-40K",
+        description="ROS Python 机器人控制",
+        bossActiveText="刚刚活跃",
+        publishedText="今日发布",
+    )
+    ai_client = FakeAIClient()
+
+    result = await MatchingService(ai_client).match(job, make_resume(), make_preference())
+
+    assert result.should_queue is True
+    assert result.hard_filter_reasons == []
+    assert ai_client.calls == 1
 
 
 @pytest.mark.asyncio
@@ -125,6 +156,7 @@ async def test_match_filters_common_salary_formats(
         city="上海",
         salaryText=salary_text,
         description="ROS Python 机器人控制",
+        bossActiveText="刚刚活跃",
         publishedText="今日发布",
     )
     ai_client = FakeAIClient()
@@ -152,6 +184,7 @@ async def test_match_ignores_blank_blocked_company_entries() -> None:
         city="上海",
         salaryText="25-40K",
         description="ROS Python 机器人控制",
+        bossActiveText="刚刚活跃",
         publishedText="今日发布",
     )
     ai_client = FakeAIClient()
@@ -170,6 +203,7 @@ async def test_match_ignores_blank_blocked_company_entries() -> None:
         {"score": 101, "reasons": [], "risks": [], "greeting": "您好"},
         {"score": "high", "reasons": [], "risks": [], "greeting": "您好"},
         {"score": 88, "reasons": "匹配", "risks": [], "greeting": "您好"},
+        {"score": 88, "reasons": [], "risks": [], "greeting": "您好", "extra": "nope"},
     ],
 )
 async def test_match_wraps_invalid_ai_match_output(ai_response: dict) -> None:
@@ -181,6 +215,7 @@ async def test_match_wraps_invalid_ai_match_output(ai_response: dict) -> None:
         city="上海",
         salaryText="25-40K",
         description="ROS Python 机器人控制",
+        bossActiveText="刚刚活跃",
         publishedText="今日发布",
     )
 
@@ -213,6 +248,7 @@ async def test_match_filters_by_published_recency(
         "city": "上海",
         "salaryText": "25-40K",
         "description": "ROS Python 机器人控制",
+        "bossActiveText": "刚刚活跃",
     }
     if published_text is not None:
         job_kwargs["publishedText"] = published_text
@@ -237,6 +273,8 @@ async def test_match_filters_by_published_recency(
         ({"city": "北京"}, "城市不匹配"),
         ({"title": "后端工程师", "description": "Java 服务端开发"}, "岗位关键词不匹配"),
         ({"bossActiveText": "很久没活跃"}, "Boss 活跃度不满足"),
+        ({"bossActiveText": "活跃状态未知"}, "Boss 活跃度无法解析"),
+        ({"bossActiveText": None}, "Boss 活跃度无法解析"),
     ],
 )
 async def test_match_applies_direct_hard_filters(job_updates: dict, expected_reason: str) -> None:
