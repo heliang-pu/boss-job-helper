@@ -66,7 +66,7 @@ describe("extension manifest contract", () => {
     );
     expect(manifest.host_permissions).not.toContain("http://127.0.0.1/*");
     expect(manifest.host_permissions).not.toContain("http://localhost/*");
-    expect(manifest.action.default_popup).toBe("index.html");
+    expect(manifest.action.default_popup).toBe("popup.html");
     expect(manifest.background.service_worker).toBe("src/background/main.ts");
     expect(manifest.options_page).toBe("index.html");
   });

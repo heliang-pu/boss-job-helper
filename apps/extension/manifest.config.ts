@@ -8,7 +8,7 @@ const manifest = {
   permissions: ["storage", "activeTab", "scripting"],
   host_permissions: ["https://www.zhipin.com/*", "http://127.0.0.1:8765/*", "http://localhost:8765/*"],
   action: {
-    default_popup: "index.html",
+    default_popup: "popup.html",
   },
   background: {
     service_worker: "src/background/main.ts",
