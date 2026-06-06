@@ -23,7 +23,7 @@ test("repository has the MVP monorepo layout", () => {
     "apps/local-service/tests/__init__.py",
     "packages/shared-schema",
     "packages/shared-schema/package.json",
-    "packages/shared-schema/src/.gitkeep",
+    "packages/shared-schema/src/index.ts",
     "docs/superpowers/specs/2026-06-06-boss-job-apply-assistant-design.md",
   ];
 
