@@ -35,7 +35,6 @@ class ApplyQueue:
             self.pause_reason = "当前时间不在投递时间段"
             return None
         if any(task.status == "applying" for task in self.tasks):
-            self.pause_reason = "已有投递进行中"
             return None
 
         for task in self.tasks:

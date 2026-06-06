@@ -100,7 +100,7 @@ def test_next_task_blocks_dispatch_while_another_task_is_applying() -> None:
 
     assert selected_again is None
     assert second.status == "queued"
-    assert queue.pause_reason == "已有投递进行中"
+    assert queue.pause_reason is None
 
 
 def test_queue_ignores_duplicate_enqueue_by_job_url() -> None:
@@ -113,6 +113,21 @@ def test_queue_ignores_duplicate_enqueue_by_job_url() -> None:
     selected = queue.next_task(make_preference(), inside_window_now())
     assert selected is first
     queue.mark_applied(selected)
+
+    assert queue.next_task(make_preference(), inside_window_now()) is None
+
+
+def test_enqueue_ignores_duplicate_when_existing_same_url_task_is_applying() -> None:
+    queue = ApplyQueue()
+    job_url = "https://www.zhipin.com/job_detail/applying-dupe.html"
+    applying = make_task(url=job_url)
+    queue.enqueue(applying)
+    selected = queue.next_task(make_preference(), inside_window_now())
+    assert selected is applying
+    duplicate = make_task(url=job_url)
+
+    queue.enqueue(duplicate)
+    queue.mark_applied(applying, now=inside_window_now())
 
     assert queue.next_task(make_preference(), inside_window_now()) is None
 
