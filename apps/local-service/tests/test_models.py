@@ -148,6 +148,19 @@ def test_search_preference_rejects_blank_required_lists(field: str) -> None:
         SearchPreference(**{**valid_search_preference_kwargs(), field: ["  ", ""]})
 
 
+@pytest.mark.parametrize("field", ["target_cities", "keywords"])
+def test_search_preference_rejects_mixed_blank_required_list_items(field: str) -> None:
+    with pytest.raises(ValidationError):
+        SearchPreference(**{**valid_search_preference_kwargs(), field: ["上海", "  "]})
+
+
+@pytest.mark.parametrize("field", ["target_cities", "keywords"])
+def test_search_preference_trims_required_list_items(field: str) -> None:
+    preference = SearchPreference(**{**valid_search_preference_kwargs(), field: [" 上海 "]})
+
+    assert getattr(preference, field) == ["上海"]
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     [("salaryMinK", "20"), ("requireActiveBoss", "true"), ("matchThreshold", 80.0)],
@@ -271,6 +284,18 @@ def test_job_posting_rejects_invalid_url() -> None:
 def test_job_posting_rejects_empty_required_strings(field: str) -> None:
     with pytest.raises(ValidationError):
         JobPosting(**{**valid_job_posting_kwargs(), field: "  "})
+
+
+@pytest.mark.parametrize("field", ["experience_text", "education_text", "boss_active_text", "published_text"])
+def test_job_posting_rejects_empty_optional_strings_when_present(field: str) -> None:
+    with pytest.raises(ValidationError):
+        JobPosting(**{**valid_job_posting_kwargs(), field: "  "})
+
+
+def test_job_posting_trims_optional_strings_when_present() -> None:
+    job = JobPosting(**{**valid_job_posting_kwargs(), "experience_text": " 3-5年 "})
+
+    assert job.experience_text == "3-5年"
 
 
 @pytest.mark.parametrize("field", ["id", "file_name", "raw_text"])

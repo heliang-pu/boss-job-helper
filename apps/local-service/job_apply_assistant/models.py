@@ -24,6 +24,12 @@ def require_non_blank_string(value: str) -> str:
     return cleaned
 
 
+def require_optional_non_blank_string(value: str | None) -> str | None:
+    if value is None:
+        return value
+    return require_non_blank_string(value)
+
+
 class WireModel(BaseModel):
     model_config = ConfigDict(populate_by_name=True, strict=True)
 
@@ -57,6 +63,11 @@ class JobPosting(WireModel):
     def require_core_strings(cls, value: str) -> str:
         return require_non_blank_string(value)
 
+    @field_validator("experience_text", "education_text", "boss_active_text", "published_text")
+    @classmethod
+    def require_optional_strings(cls, value: str | None) -> str | None:
+        return require_optional_non_blank_string(value)
+
 
 class SearchPreference(WireModel):
     target_cities: list[str] = Field(alias="targetCities")
@@ -77,7 +88,12 @@ class SearchPreference(WireModel):
     @field_validator("target_cities", "keywords")
     @classmethod
     def require_non_empty_strings(cls, values: list[str]) -> list[str]:
-        cleaned = [value.strip() for value in values if value.strip()]
+        cleaned = []
+        for value in values:
+            stripped = value.strip()
+            if not stripped:
+                raise ValueError("list items must be non-empty strings")
+            cleaned.append(stripped)
         if not cleaned:
             raise ValueError("list must contain at least one non-empty string")
         return cleaned
