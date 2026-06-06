@@ -34,7 +34,8 @@ class ResumeParser:
         elif suffix == ".docx":
             text = self._extract_docx(path)
         else:
-            raise ValueError(f"Unsupported resume file type: {suffix}")
+            file_type = suffix or "no extension"
+            raise ValueError(f"Unsupported resume file type: {file_type}")
 
         cleaned = self._normalize_text(text)
         skills = [skill for skill in SKILL_KEYWORDS if skill.lower() in cleaned.lower()]
@@ -57,22 +58,30 @@ class ResumeParser:
 
     def _extract_docx(self, path: Path) -> str:
         document = Document(str(path))
-        return "\n".join(paragraph.text for paragraph in document.paragraphs)
+        parts = [paragraph.text for paragraph in document.paragraphs]
+        for table in document.tables:
+            for row in table.rows:
+                parts.extend(cell.text for cell in row.cells)
+        return "\n".join(parts)
 
     def _normalize_text(self, text: str) -> str:
         return re.sub(r"\s+", " ", text).strip()
 
     def _extract_years(self, text: str) -> float:
-        match = re.search(r"(\d+(?:\.\d+)?)\s*年", text)
+        match = re.search(r"(\d+(?:\.\d+)?)\s*(?:年|years?|yrs?)\b", text, flags=re.IGNORECASE)
         return float(match.group(1)) if match else 0.0
 
     def _extract_project_highlights(self, text: str) -> list[str]:
         sentences = re.split(r"[。.!?]", text)
-        return [sentence.strip() for sentence in sentences if "项目" in sentence][:5]
+        return [
+            sentence.strip()
+            for sentence in sentences
+            if "项目" in sentence or "project" in sentence.lower()
+        ][:5]
 
     def _extract_education(self, text: str) -> list[str]:
-        education_words = ["本科", "硕士", "博士", "大专"]
-        return [word for word in education_words if word in text]
+        education_words = ["本科", "硕士", "博士", "大专", "Bachelor", "Master", "PhD"]
+        return [word for word in education_words if word.lower() in text.lower()]
 
     def _suggest_roles(self, text: str) -> list[str]:
         roles: list[str] = []
