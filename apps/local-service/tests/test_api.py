@@ -231,16 +231,52 @@ def test_match_domain_errors_return_sanitized_502(error: Exception) -> None:
     assert "test-secret-key" not in response.text
 
 
+def test_match_validation_errors_do_not_leak_ai_config_secret() -> None:
+    client = TestClient(create_app())
+    payload = make_match_payload(api_key="secret-key")
+    assert isinstance(payload["aiConfig"], dict)
+    payload["aiConfig"].pop("model")
+
+    response = client.post("/match", json=payload)
+
+    assert response.status_code == 422
+    assert "secret-key" not in response.text
+    assert "input" not in response.text
+
+
 def test_chrome_extension_cors_preflight_is_allowed() -> None:
     client = TestClient(create_app())
 
     response = client.options(
         "/match",
         headers={
-            "Origin": "chrome-extension://abcdefghijklmnop",
+            "Origin": "chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             "Access-Control-Request-Method": "POST",
         },
     )
 
     assert response.status_code == 200
-    assert response.headers["access-control-allow-origin"] == "chrome-extension://abcdefghijklmnop"
+    assert response.headers["access-control-allow-origin"] == (
+        "chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    )
+
+
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "chrome-extension://",
+        "chrome-extension://not-a-valid-extension-id",
+    ],
+)
+def test_malformed_chrome_extension_cors_preflight_is_not_allowed(origin: str) -> None:
+    client = TestClient(create_app())
+
+    response = client.options(
+        "/match",
+        headers={
+            "Origin": origin,
+            "Access-Control-Request-Method": "POST",
+        },
+    )
+
+    assert "access-control-allow-origin" not in response.headers
