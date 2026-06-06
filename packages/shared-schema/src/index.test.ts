@@ -21,6 +21,33 @@ const bossJobPosting = {
   publishedText: "今日发布",
 } as const;
 
+const validSearchPreference = {
+  targetCities: ["上海"],
+  keywords: ["机器人"],
+  salaryMinK: 20,
+  salaryMaxK: 45,
+  blockedCompanies: [],
+  blockedIndustries: [],
+  recencyDays: 7,
+  requireActiveBoss: true,
+  matchThreshold: 80,
+  dailyLimit: 20,
+  applyWindowStart: "09:30",
+  applyWindowEnd: "18:30",
+  intervalMinSeconds: 90,
+  intervalMaxSeconds: 240,
+};
+
+const matchResult = {
+  passedHardFilters: true,
+  hardFilterReasons: [],
+  score: 86,
+  reasons: ["项目经历与岗位方向匹配"],
+  risks: ["薪资上限未明确"],
+  greeting: "您好，我有机器人项目经验，和该岗位方向较匹配，期待沟通。",
+  shouldQueue: true,
+} as const;
+
 describe("shared schemas", () => {
   it("validates a Boss job posting", () => {
     const parsed = JobPostingSchema.parse(bossJobPosting);
@@ -51,36 +78,39 @@ describe("shared schemas", () => {
   });
 
   it("rejects invalid search preference ranges and apply windows", () => {
-    const validPreference = {
-      targetCities: ["上海"],
-      keywords: ["机器人"],
-      salaryMinK: 20,
-      salaryMaxK: 45,
-      blockedCompanies: [],
-      blockedIndustries: [],
-      recencyDays: 7,
-      requireActiveBoss: true,
-      matchThreshold: 80,
-      dailyLimit: 20,
-      applyWindowStart: "09:30",
-      applyWindowEnd: "18:30",
-      intervalMinSeconds: 90,
-      intervalMaxSeconds: 240,
-    };
-
     expect(() =>
       SearchPreferenceSchema.parse({
-        ...validPreference,
+        ...validSearchPreference,
         salaryMinK: 50,
       }),
     ).toThrow("salaryMinK must be <= salaryMaxK");
 
     expect(() =>
       SearchPreferenceSchema.parse({
-        ...validPreference,
+        ...validSearchPreference,
         applyWindowStart: "24:00",
       }),
     ).toThrow();
+  });
+
+  it("rejects inverted same-day apply windows", () => {
+    expect(() =>
+      SearchPreferenceSchema.parse({
+        ...validSearchPreference,
+        applyWindowStart: "18:30",
+        applyWindowEnd: "09:30",
+      }),
+    ).toThrow("applyWindowStart must be <= applyWindowEnd");
+  });
+
+  it("rejects inverted apply intervals", () => {
+    expect(() =>
+      SearchPreferenceSchema.parse({
+        ...validSearchPreference,
+        intervalMinSeconds: 300,
+        intervalMaxSeconds: 120,
+      }),
+    ).toThrow("intervalMinSeconds must be <= intervalMaxSeconds");
   });
 
   it("validates a resume profile", () => {
@@ -101,15 +131,7 @@ describe("shared schemas", () => {
   });
 
   it("validates match result and apply task state", () => {
-    const match = MatchResultSchema.parse({
-      passedHardFilters: true,
-      hardFilterReasons: [],
-      score: 86,
-      reasons: ["项目经历与岗位方向匹配"],
-      risks: ["薪资上限未明确"],
-      greeting: "您好，我有机器人项目经验，和该岗位方向较匹配，期待沟通。",
-      shouldQueue: true,
-    });
+    const match = MatchResultSchema.parse(matchResult);
 
     const task = ApplyTaskSchema.parse({
       id: "task_1",
@@ -123,5 +145,19 @@ describe("shared schemas", () => {
 
     expect(task.status).toBe("queued");
     expect(task.job.url).toBe("https://www.zhipin.com/job_detail/abc.html");
+  });
+
+  it("rejects legacy apply tasks with only a job URL", () => {
+    expect(() =>
+      ApplyTaskSchema.parse({
+        id: "task_1",
+        jobUrl: "https://www.zhipin.com/job_detail/abc.html",
+        status: "queued",
+        match: matchResult,
+        greeting: matchResult.greeting,
+        createdAt: "2026-06-06T10:00:00.000Z",
+        updatedAt: "2026-06-06T10:00:00.000Z",
+      }),
+    ).toThrow();
   });
 });

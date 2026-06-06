@@ -35,6 +35,10 @@ export const SearchPreferenceSchema = z
   })
   .refine((value) => value.salaryMinK <= value.salaryMaxK, "salaryMinK must be <= salaryMaxK")
   .refine(
+    (value) => value.applyWindowStart <= value.applyWindowEnd,
+    "applyWindowStart must be <= applyWindowEnd",
+  )
+  .refine(
     (value) => value.intervalMinSeconds <= value.intervalMaxSeconds,
     "intervalMinSeconds must be <= intervalMaxSeconds",
   );
