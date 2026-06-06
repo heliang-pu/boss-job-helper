@@ -22,13 +22,15 @@ export function FloatingPanel() {
       <div style={{ display: "flex", gap: 8 }}>
         <button
           type="button"
+          disabled
           style={{
             minHeight: 34,
             flex: "1 1 0",
             border: "1px solid #cbd5e1",
             borderRadius: 6,
-            background: "#111827",
-            color: "#ffffff",
+            background: "#e5e7eb",
+            color: "#6b7280",
+            cursor: "not-allowed",
             font: "inherit",
             fontSize: 14,
           }}
@@ -37,13 +39,15 @@ export function FloatingPanel() {
         </button>
         <button
           type="button"
+          disabled
           style={{
             minHeight: 34,
             flex: "0 0 70px",
             border: "1px solid #cbd5e1",
             borderRadius: 6,
-            background: "#ffffff",
-            color: "#111827",
+            background: "#f3f4f6",
+            color: "#6b7280",
+            cursor: "not-allowed",
             font: "inherit",
             fontSize: 14,
           }}

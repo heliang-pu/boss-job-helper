@@ -68,6 +68,18 @@ describe("shared schemas", () => {
     },
   );
 
+  it.each(["https://evil.example/job_detail/abc.html", "http://www.zhipin.com/job_detail/abc.html"])(
+    "rejects Boss job URLs outside the secure Boss domain: %s",
+    (url) => {
+      expect(() =>
+        JobPostingSchema.parse({
+          ...bossJobPosting,
+          url,
+        }),
+      ).toThrow();
+    },
+  );
+
   it.each(["url", "title", "companyName", "city", "salaryText", "description"] as const)(
     "rejects whitespace-only job posting field %s",
     (field) => {

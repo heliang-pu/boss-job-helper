@@ -14,13 +14,15 @@ export function Popup() {
       <p style={{ margin: "0 0 16px", color: "#4b5563", fontSize: 14, lineHeight: 1.5 }}>今日投递：0</p>
       <button
         type="button"
+        disabled
         style={{
           minHeight: 36,
           width: "100%",
           border: "1px solid #cbd5e1",
           borderRadius: 6,
-          background: "#ffffff",
-          color: "#111827",
+          background: "#f3f4f6",
+          color: "#6b7280",
+          cursor: "not-allowed",
           font: "inherit",
         }}
       >

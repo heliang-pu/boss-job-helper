@@ -15,7 +15,11 @@ function text(root: ParentNode, selector: string): string | undefined {
 }
 
 function absoluteBossUrl(href: string): string {
-  return new URL(href, BOSS_ORIGIN).toString();
+  const url = new URL(href, BOSS_ORIGIN);
+  if (url.protocol !== "https:" || url.hostname !== "www.zhipin.com") {
+    throw new Error("Unsupported Boss job URL");
+  }
+  return url.toString();
 }
 
 export class BossAdapter {
@@ -64,10 +68,18 @@ export class BossAdapter {
   }
 
   detectBlockingCondition(): string | null {
-    const pageText = this.doc.body.textContent ?? "";
+    const pageText = normalizeText(this.doc.body.textContent) ?? "";
     if (pageText.includes("验证码") || pageText.includes("人机验证")) return "遇到验证码或人机验证";
     if (pageText.includes("登录") && pageText.includes("扫码")) return "登录状态失效";
+    if (["请先登录", "登录后查看", "未登录"].some((prompt) => pageText.includes(prompt))) {
+      return "登录状态失效";
+    }
     if (pageText.includes("账号异常")) return "账号异常提示";
+    const blockingDialog = this.doc.querySelector(
+      '[role="dialog"], .modal, .dialog, .popup, .captcha, .verify, .login-dialog',
+    );
+    if (normalizeText(blockingDialog?.textContent)) return "遇到未知弹窗或页面提示";
+    if (!this.doc.querySelector(".job-card-wrapper")) return "页面结构未知";
     return null;
   }
 }

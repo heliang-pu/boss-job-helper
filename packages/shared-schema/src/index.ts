@@ -2,19 +2,19 @@ import { z } from "zod";
 
 const nonBlankString = z.string().trim().min(1);
 const optionalNonBlankString = nonBlankString.optional();
-const httpUrlString = z
+const bossUrlString = z
   .string()
   .trim()
   .min(1)
   .url()
   .refine((value) => {
-    const protocol = new URL(value).protocol;
-    return protocol === "http:" || protocol === "https:";
-  }, "URL must use HTTP(S)");
+    const url = new URL(value);
+    return url.protocol === "https:" && url.hostname === "www.zhipin.com";
+  }, "Boss URL must use https://www.zhipin.com");
 
 export const JobPostingSchema = z.object({
   source: z.literal("boss"),
-  url: httpUrlString,
+  url: bossUrlString,
   title: nonBlankString,
   companyName: nonBlankString,
   city: nonBlankString,
