@@ -204,6 +204,27 @@ async def test_complete_json_wraps_bad_ai_responses(response_json: dict) -> None
 
 
 @pytest.mark.asyncio
+async def test_complete_json_wraps_invalid_json_without_leaking_response_content() -> None:
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": '{"secret":"secret","score":'}}]},
+        )
+    )
+
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = AIClient(
+            AIConfig(base_url="https://api.example.com/v1", api_key="secret", model="test-model"),
+            http_client=http_client,
+        )
+
+        with pytest.raises(AIResponseError, match="Invalid AI response") as exc_info:
+            await client.complete_json("分析岗位", {"title": "机器人算法工程师"})
+
+    assert_no_transport_error_leak(exc_info.value)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("status_code", [401, 429])
 async def test_complete_json_wraps_http_status_errors_without_leaking_api_key(status_code: int) -> None:
     transport = httpx.MockTransport(lambda request: httpx.Response(status_code, request=request))

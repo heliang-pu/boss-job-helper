@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from decimal import Decimal, InvalidOperation
 import re
 from typing import Protocol
 
@@ -77,10 +78,14 @@ class MatchingService:
                 "job": job.to_wire(),
             },
         )
+        validated_ai_result: AIMatchResponse | None = None
         try:
             validated_ai_result = AIMatchResponse.model_validate(ai_result)
-        except ValidationError as exc:
-            raise MatchingResponseError("Invalid AI match response") from exc
+        except ValidationError:
+            pass
+
+        if validated_ai_result is None:
+            raise MatchingResponseError("Invalid AI match response")
 
         return MatchResult(
             passedHardFilters=True,
@@ -133,18 +138,26 @@ class MatchingService:
             rf"(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)\s*万{safe_suffix}", normalized
         )
         if wan_range_match:
+            salary_min = self._wan_to_k(wan_range_match.group(1))
+            salary_max = self._wan_to_k(wan_range_match.group(2))
             return self._valid_salary_range(
-                self._wan_to_k(wan_range_match.group(1)),
-                self._wan_to_k(wan_range_match.group(2)),
+                salary_min,
+                salary_max,
             )
 
         k_range_match = re.fullmatch(rf"(\d+)\s*K?\s*-\s*(\d+)\s*K{safe_suffix}", normalized, re.IGNORECASE)
         if k_range_match:
-            return self._valid_salary_range(int(k_range_match.group(1)), int(k_range_match.group(2)))
+            return self._valid_salary_range(
+                self._safe_int(k_range_match.group(1)),
+                self._safe_int(k_range_match.group(2)),
+            )
 
         k_min_match = re.fullmatch(rf"(\d+)\s*K\s*以上{safe_suffix}", normalized, re.IGNORECASE)
         if k_min_match:
-            return int(k_min_match.group(1)), 1_000_000
+            salary_min = self._safe_int(k_min_match.group(1))
+            if salary_min is None:
+                return None
+            return salary_min, 1_000_000
 
         return None
 
@@ -156,26 +169,45 @@ class MatchingService:
             return 0
         minutes_match = re.fullmatch(r"(\d+)\s*分钟前(?:发布)?", normalized)
         if minutes_match:
-            minutes = int(minutes_match.group(1))
+            minutes = self._safe_int(minutes_match.group(1))
+            if minutes is None:
+                return None
             return 0 if minutes < 1440 else (minutes + 1439) // 1440
         hours_match = re.fullmatch(r"(\d+)\s*小时前(?:发布)?", normalized)
         if hours_match:
-            hours = int(hours_match.group(1))
+            hours = self._safe_int(hours_match.group(1))
+            if hours is None:
+                return None
             return 0 if hours < 24 else (hours + 23) // 24
         if re.fullmatch(r"昨天(?:发布)?", normalized):
             return 1
         days_match = re.fullmatch(r"(\d+)\s*天前(?:发布)?", normalized)
         if days_match:
-            return int(days_match.group(1))
+            return self._safe_int(days_match.group(1))
         return None
 
-    def _wan_to_k(self, value: str) -> int:
-        return int(float(value) * 10)
+    def _wan_to_k(self, value: str) -> int | None:
+        if len(value) > 12:
+            return None
+        try:
+            return int(Decimal(value) * 10)
+        except (InvalidOperation, ValueError, OverflowError):
+            return None
 
-    def _valid_salary_range(self, salary_min: int, salary_max: int) -> tuple[int, int] | None:
+    def _valid_salary_range(self, salary_min: int | None, salary_max: int | None) -> tuple[int, int] | None:
+        if salary_min is None or salary_max is None:
+            return None
         if salary_min > salary_max:
             return None
         return salary_min, salary_max
+
+    def _safe_int(self, value: str) -> int | None:
+        if len(value) > 6:
+            return None
+        try:
+            return int(value)
+        except (ValueError, OverflowError):
+            return None
 
     def _city_matches(self, job_city: str, target_cities: list[str]) -> bool:
         normalized_job_city = self._normalize_city(job_city)
@@ -213,11 +245,13 @@ class MatchingService:
 
         day_match = re.fullmatch(r"(\d+)\s*日内活跃", normalized)
         if day_match:
-            return int(day_match.group(1)) <= 7
+            days = self._safe_int(day_match.group(1))
+            return None if days is None else days <= 7
 
         hour_match = re.fullmatch(r"(\d+)\s*小时前活跃", normalized)
         if hour_match:
-            return int(hour_match.group(1)) <= 168
+            hours = self._safe_int(hour_match.group(1))
+            return None if hours is None else hours <= 168
 
         if re.fullmatch(r"\d+\s*分钟前活跃", normalized):
             return True

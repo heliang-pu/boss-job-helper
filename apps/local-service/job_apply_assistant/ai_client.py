@@ -135,13 +135,19 @@ class AIClient:
         if transport_error is not None:
             raise transport_error
 
+        parsed_content: dict[str, Any] | None = None
         try:
             content = response.json()["choices"][0]["message"]["content"]
             if not isinstance(content, str):
                 raise TypeError("message content must be a string")
-            parsed_content = json.loads(content)
-            if not isinstance(parsed_content, dict):
+            decoded_content = json.loads(content)
+            if not isinstance(decoded_content, dict):
                 raise TypeError("message content must decode to a JSON object")
-            return parsed_content
-        except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as exc:
-            raise AIResponseError("Invalid AI response") from exc
+            parsed_content = decoded_content
+        except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError):
+            pass
+
+        if parsed_content is None:
+            raise AIResponseError("Invalid AI response")
+
+        return parsed_content

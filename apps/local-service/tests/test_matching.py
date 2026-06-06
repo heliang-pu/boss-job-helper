@@ -249,6 +249,35 @@ async def test_match_wraps_invalid_ai_match_output(ai_response: dict) -> None:
 
 
 @pytest.mark.asyncio
+async def test_match_wraps_invalid_ai_match_output_without_leaking_validation_context() -> None:
+    job = JobPosting(
+        source="boss",
+        url="https://www.zhipin.com/job_detail/secret.html",
+        title="机器人软件工程师",
+        companyName="示例科技",
+        city="上海",
+        salaryText="25-40K",
+        description="ROS Python 机器人控制",
+        bossActiveText="刚刚活跃",
+        publishedText="今日发布",
+    )
+    ai_response = {
+        "score": 88,
+        "reasons": [],
+        "risks": [],
+        "greeting": "您好",
+        "secret": "secret",
+    }
+
+    with pytest.raises(MatchingResponseError, match="Invalid AI match response") as exc_info:
+        await MatchingService(FakeAIClient(ai_response)).match(job, make_resume(), make_preference())
+
+    assert "secret" not in str(exc_info.value)
+    assert exc_info.value.__cause__ is None
+    assert exc_info.value.__context__ is None
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("published_text", "recency_days", "should_queue", "expected_reason"),
     [
@@ -267,6 +296,7 @@ async def test_match_wraps_invalid_ai_match_output(ai_response: dict) -> None:
         ("昨天发布", 1, True, None),
         ("昨天发布 30天前", 1, False, "发布时间无法解析"),
         ("9999分钟前发布", 1, False, "发布时间不满足"),
+        (f"{'9' * 5000}分钟前发布", 1, False, "发布时间无法解析"),
         ("3天前", 3, True, None),
         ("30天前", 7, False, "发布时间不满足"),
         ("未知发布", 7, False, "发布时间无法解析"),
@@ -315,6 +345,7 @@ async def test_match_filters_by_published_recency(
         ({"bossActiveText": "当前不在线"}, "Boss 活跃度不满足"),
         ({"bossActiveText": "未在线"}, "Boss 活跃度不满足"),
         ({"bossActiveText": "999小时前活跃"}, "Boss 活跃度不满足"),
+        ({"bossActiveText": f"{'9' * 5000}小时前活跃"}, "Boss 活跃度无法解析"),
         ({"bossActiveText": "很久没在线"}, "Boss 活跃度不满足"),
         ({"bossActiveText": "上月在线"}, "Boss 活跃度不满足"),
         ({"bossActiveText": "活跃状态未知"}, "Boss 活跃度无法解析"),
@@ -364,3 +395,25 @@ async def test_match_accepts_recent_boss_active_texts(boss_active_text: str) -> 
     assert result.should_queue is True
     assert result.hard_filter_reasons == []
     assert ai_client.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_match_hard_filters_unparseable_oversized_salary_number() -> None:
+    job = JobPosting(
+        source="boss",
+        url="https://www.zhipin.com/job_detail/oversized-salary.html",
+        title="机器人软件工程师",
+        companyName="示例科技",
+        city="上海",
+        salaryText=f"{'9' * 5000}-40K",
+        description="ROS Python 机器人控制",
+        bossActiveText="刚刚活跃",
+        publishedText="今日发布",
+    )
+    ai_client = FakeAIClient()
+
+    result = await MatchingService(ai_client).match(job, make_resume(), make_preference())
+
+    assert result.should_queue is False
+    assert "薪资无法解析" in result.hard_filter_reasons
+    assert ai_client.calls == 0
