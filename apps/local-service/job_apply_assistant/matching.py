@@ -3,7 +3,22 @@ from __future__ import annotations
 import re
 from typing import Protocol
 
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
+
 from job_apply_assistant.models import JobPosting, MatchResult, ResumeProfile, SearchPreference
+
+
+class MatchingResponseError(RuntimeError):
+    pass
+
+
+class AIMatchResponse(BaseModel):
+    model_config = ConfigDict(strict=True)
+
+    score: int = Field(ge=0, le=100)
+    reasons: list[str]
+    risks: list[str]
+    greeting: str
 
 
 class JsonCompletionClient(Protocol):
@@ -41,22 +56,27 @@ class MatchingService:
                 "job": job.to_wire(),
             },
         )
-        score = int(ai_result["score"])
+        try:
+            validated_ai_result = AIMatchResponse.model_validate(ai_result)
+        except ValidationError as exc:
+            raise MatchingResponseError("Invalid AI match response") from exc
+
         return MatchResult(
             passedHardFilters=True,
             hardFilterReasons=[],
-            score=score,
-            reasons=list(ai_result.get("reasons", [])),
-            risks=list(ai_result.get("risks", [])),
-            greeting=str(ai_result.get("greeting", "")),
-            shouldQueue=score >= preference.match_threshold,
+            score=validated_ai_result.score,
+            reasons=validated_ai_result.reasons,
+            risks=validated_ai_result.risks,
+            greeting=validated_ai_result.greeting,
+            shouldQueue=validated_ai_result.score >= preference.match_threshold,
         )
 
     def _hard_filter(self, job: JobPosting, preference: SearchPreference) -> list[str]:
         reasons: list[str] = []
         if job.city not in preference.target_cities:
             reasons.append("城市不匹配")
-        if any(blocked in job.company_name for blocked in preference.blocked_companies):
+        blocked_companies = [blocked.strip() for blocked in preference.blocked_companies if blocked.strip()]
+        if any(blocked in job.company_name for blocked in blocked_companies):
             reasons.append("公司在黑名单中")
         if not any(
             keyword.lower() in f"{job.title} {job.description}".lower() for keyword in preference.keywords
@@ -67,14 +87,27 @@ class MatchingService:
             if any(word in job.boss_active_text for word in inactive_words):
                 reasons.append("Boss 活跃度不满足")
         salary_range = self._parse_salary_range(job.salary_text)
-        if salary_range is not None:
-            salary_min, salary_max = salary_range
-            if salary_max < preference.salary_min_k or salary_min > preference.salary_max_k:
-                reasons.append("薪资范围不匹配")
+        if salary_range is None:
+            reasons.append("薪资无法解析")
+            return reasons
+
+        salary_min, salary_max = salary_range
+        if salary_max < preference.salary_min_k or salary_min > preference.salary_max_k:
+            reasons.append("薪资范围不匹配")
         return reasons
 
     def _parse_salary_range(self, salary_text: str) -> tuple[int, int] | None:
-        match = re.search(r"(\d+)\s*-\s*(\d+)\s*K", salary_text, re.IGNORECASE)
-        if not match:
-            return None
-        return int(match.group(1)), int(match.group(2))
+        normalized = salary_text.strip()
+        k_range_match = re.search(r"(\d+)\s*K?\s*-\s*(\d+)\s*K", normalized, re.IGNORECASE)
+        if k_range_match:
+            return int(k_range_match.group(1)), int(k_range_match.group(2))
+
+        wan_range_match = re.search(r"(\d+)\s*-\s*(\d+)\s*万", normalized)
+        if wan_range_match:
+            return int(wan_range_match.group(1)) * 10, int(wan_range_match.group(2)) * 10
+
+        k_min_match = re.search(r"(\d+)\s*K\s*以上", normalized, re.IGNORECASE)
+        if k_min_match:
+            return int(k_min_match.group(1)), 1_000_000
+
+        return None
