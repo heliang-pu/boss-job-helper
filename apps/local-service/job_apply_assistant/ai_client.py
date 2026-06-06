@@ -29,7 +29,7 @@ class AIConfig:
     timeout_seconds: float = 30.0
 
     def __post_init__(self) -> None:
-        for field_name in ["base_url", "api_key", "model"]:
+        for field_name in ["api_key", "model"]:
             raw_value = getattr(self, field_name)
             if not isinstance(raw_value, str):
                 raise ValueError(f"{field_name} must be a string")
@@ -37,10 +37,19 @@ class AIConfig:
             if not value:
                 raise ValueError(f"{field_name} must not be empty")
             object.__setattr__(self, field_name, value)
-        parsed_base_url = urlparse(self.base_url)
+
+        if not isinstance(self.base_url, str):
+            raise ValueError("base_url must be a string")
+        if not self.base_url:
+            raise ValueError("base_url must not be empty")
         if any(character.isspace() or ord(character) < 32 or ord(character) == 127 for character in self.base_url):
             raise ValueError("base_url must not contain whitespace or control characters")
-        if parsed_base_url.scheme not in {"http", "https"} or not parsed_base_url.netloc:
+        parsed_base_url = urlparse(self.base_url)
+        try:
+            parsed_base_url.port
+        except ValueError as exc:
+            raise ValueError("base_url must be a valid HTTP or HTTPS URL") from exc
+        if parsed_base_url.scheme not in {"http", "https"} or not parsed_base_url.hostname:
             raise ValueError("base_url must be an HTTP or HTTPS URL with a host")
         if self.timeout_seconds <= 0:
             raise ValueError("timeout_seconds must be positive")
