@@ -7,6 +7,9 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
+APPLY_WINDOW_PATTERN = r"^([01]\d|2[0-3]):[0-5]\d$"
+
+
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
@@ -40,8 +43,8 @@ class SearchPreference(BaseModel):
     require_active_boss: bool = Field(alias="requireActiveBoss")
     match_threshold: int = Field(alias="matchThreshold", ge=1, le=100)
     daily_limit: int = Field(alias="dailyLimit", gt=0)
-    apply_window_start: str = Field(alias="applyWindowStart")
-    apply_window_end: str = Field(alias="applyWindowEnd")
+    apply_window_start: str = Field(alias="applyWindowStart", pattern=APPLY_WINDOW_PATTERN)
+    apply_window_end: str = Field(alias="applyWindowEnd", pattern=APPLY_WINDOW_PATTERN)
     interval_min_seconds: int = Field(alias="intervalMinSeconds", gt=0)
     interval_max_seconds: int = Field(alias="intervalMaxSeconds", gt=0)
 
@@ -57,6 +60,8 @@ class SearchPreference(BaseModel):
     def validate_ranges(self) -> SearchPreference:
         if self.salary_min_k > self.salary_max_k:
             raise ValueError("salary_min_k must be <= salary_max_k")
+        if self.apply_window_start > self.apply_window_end:
+            raise ValueError("apply_window_start must be <= apply_window_end")
         if self.interval_min_seconds > self.interval_max_seconds:
             raise ValueError("interval_min_seconds must be <= interval_max_seconds")
         return self

@@ -4,49 +4,27 @@ import pytest
 from job_apply_assistant.models import ApplyTask, JobPosting, MatchResult, SearchPreference
 
 
-def test_search_preference_validates_ranges() -> None:
-    preference = SearchPreference(
-        target_cities=["上海"],
-        keywords=["机器人"],
-        salary_min_k=20,
-        salary_max_k=45,
-        blocked_companies=[],
-        blocked_industries=[],
-        recency_days=7,
-        require_active_boss=True,
-        match_threshold=80,
-        daily_limit=20,
-        apply_window_start="09:30",
-        apply_window_end="18:30",
-        interval_min_seconds=90,
-        interval_max_seconds=240,
-    )
-
-    assert preference.salary_min_k == 20
+def valid_search_preference_kwargs() -> dict[str, object]:
+    return {
+        "target_cities": ["上海"],
+        "keywords": ["机器人"],
+        "salary_min_k": 20,
+        "salary_max_k": 45,
+        "blocked_companies": [],
+        "blocked_industries": [],
+        "recency_days": 7,
+        "require_active_boss": True,
+        "match_threshold": 80,
+        "daily_limit": 20,
+        "apply_window_start": "09:30",
+        "apply_window_end": "18:30",
+        "interval_min_seconds": 90,
+        "interval_max_seconds": 240,
+    }
 
 
-def test_search_preference_rejects_invalid_salary_range() -> None:
-    with pytest.raises(ValidationError):
-        SearchPreference(
-            target_cities=["上海"],
-            keywords=["机器人"],
-            salary_min_k=50,
-            salary_max_k=30,
-            blocked_companies=[],
-            blocked_industries=[],
-            recency_days=7,
-            require_active_boss=True,
-            match_threshold=80,
-            daily_limit=20,
-            apply_window_start="09:30",
-            apply_window_end="18:30",
-            interval_min_seconds=90,
-            interval_max_seconds=240,
-        )
-
-
-def test_apply_task_validates_status() -> None:
-    job = JobPosting(
+def valid_job_posting() -> JobPosting:
+    return JobPosting(
         source="boss",
         url="https://www.zhipin.com/job_detail/abc.html",
         title="机器人算法工程师",
@@ -55,17 +33,137 @@ def test_apply_task_validates_status() -> None:
         salary_text="25-40K",
         description="负责机器人感知与控制算法开发",
     )
-    match = MatchResult(
+
+
+def valid_match_result(*, should_queue: bool = True) -> MatchResult:
+    return MatchResult(
         passed_hard_filters=True,
         hard_filter_reasons=[],
         score=86,
         reasons=["项目经历匹配"],
         risks=[],
         greeting="您好，我有机器人项目经验，期待沟通。",
-        should_queue=True,
+        should_queue=should_queue,
     )
+
+
+def test_search_preference_validates_ranges() -> None:
+    preference = SearchPreference(**valid_search_preference_kwargs())
+
+    assert preference.salary_min_k == 20
+
+
+def test_search_preference_rejects_invalid_salary_range() -> None:
+    with pytest.raises(ValidationError):
+        SearchPreference(**{**valid_search_preference_kwargs(), "salary_min_k": 50, "salary_max_k": 30})
+
+
+@pytest.mark.parametrize("field", ["apply_window_start", "apply_window_end"])
+def test_search_preference_rejects_invalid_apply_window_format(field: str) -> None:
+    with pytest.raises(ValidationError):
+        SearchPreference(**{**valid_search_preference_kwargs(), field: "24:00"})
+
+
+def test_search_preference_rejects_inverted_apply_window() -> None:
+    with pytest.raises(ValidationError):
+        SearchPreference(
+            **{
+                **valid_search_preference_kwargs(),
+                "apply_window_start": "18:30",
+                "apply_window_end": "09:30",
+            }
+        )
+
+
+def test_search_preference_rejects_inverted_interval_range() -> None:
+    with pytest.raises(ValidationError):
+        SearchPreference(
+            **{
+                **valid_search_preference_kwargs(),
+                "interval_min_seconds": 240,
+                "interval_max_seconds": 90,
+            }
+        )
+
+
+@pytest.mark.parametrize("field", ["target_cities", "keywords"])
+def test_search_preference_rejects_blank_required_lists(field: str) -> None:
+    with pytest.raises(ValidationError):
+        SearchPreference(**{**valid_search_preference_kwargs(), field: ["  ", ""]})
+
+
+def test_models_accept_camel_case_shared_schema_payloads() -> None:
+    job = JobPosting(
+        source="boss",
+        url="https://www.zhipin.com/job_detail/abc.html",
+        title="机器人算法工程师",
+        companyName="示例科技",
+        city="上海",
+        salaryText="25-40K",
+        description="负责机器人感知与控制算法开发",
+    )
+    preference = SearchPreference(
+        targetCities=["上海"],
+        keywords=["机器人"],
+        salaryMinK=20,
+        salaryMaxK=45,
+        blockedCompanies=[],
+        blockedIndustries=[],
+        recencyDays=7,
+        requireActiveBoss=True,
+        matchThreshold=80,
+        dailyLimit=20,
+        applyWindowStart="09:30",
+        applyWindowEnd="18:30",
+        intervalMinSeconds=90,
+        intervalMaxSeconds=240,
+    )
+    match = MatchResult(
+        passedHardFilters=True,
+        hardFilterReasons=[],
+        score=86,
+        reasons=["项目经历匹配"],
+        risks=[],
+        greeting="您好，我有机器人项目经验，期待沟通。",
+        shouldQueue=True,
+    )
+
+    task = ApplyTask.create(job=job, match=match, greeting=match.greeting)
+    payload = task.model_dump(by_alias=True)
+
+    assert job.company_name == "示例科技"
+    assert preference.salary_min_k == 20
+    assert match.should_queue is True
+    assert "createdAt" in payload
+    assert "updatedAt" in payload
+    assert "failureReason" in payload
+    assert payload["job"]["companyName"] == "示例科技"
+    assert payload["match"]["shouldQueue"] is True
+
+
+def test_apply_task_validates_status() -> None:
+    job = valid_job_posting()
+    match = valid_match_result()
 
     task = ApplyTask.create(job=job, match=match, greeting=match.greeting)
 
     assert task.status == "queued"
     assert task.job.url == job.url
+
+
+def test_apply_task_create_filters_when_match_should_not_queue() -> None:
+    match = valid_match_result(should_queue=False)
+
+    task = ApplyTask.create(job=valid_job_posting(), match=match, greeting=match.greeting)
+
+    assert task.status == "filtered"
+
+
+def test_apply_task_create_generates_task_id_and_utc_timestamps() -> None:
+    match = valid_match_result()
+
+    task = ApplyTask.create(job=valid_job_posting(), match=match, greeting=match.greeting)
+
+    assert task.id.startswith("task_")
+    assert task.created_at.endswith("Z")
+    assert task.updated_at.endswith("Z")
