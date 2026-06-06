@@ -28,8 +28,8 @@ export const SearchPreferenceSchema = z
     requireActiveBoss: z.boolean(),
     matchThreshold: z.number().int().min(1).max(100),
     dailyLimit: z.number().int().positive(),
-    applyWindowStart: z.string().regex(/^\d{2}:\d{2}$/),
-    applyWindowEnd: z.string().regex(/^\d{2}:\d{2}$/),
+    applyWindowStart: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+    applyWindowEnd: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
     intervalMinSeconds: z.number().int().positive(),
     intervalMaxSeconds: z.number().int().positive(),
   })
@@ -82,7 +82,7 @@ export type ApplyTaskStatus = z.infer<typeof ApplyTaskStatusSchema>;
 
 export const ApplyTaskSchema = z.object({
   id: z.string().min(1),
-  jobUrl: z.string().url(),
+  job: JobPostingSchema,
   status: ApplyTaskStatusSchema,
   match: MatchResultSchema,
   greeting: z.string(),
