@@ -10,8 +10,13 @@ from job_apply_assistant.ai_client import AIClient, AIConfig, AIResponseError
     "config_kwargs",
     [
         {"base_url": "", "api_key": "secret", "model": "test-model"},
+        {"base_url": "ftp://api.example.com/v1", "api_key": "secret", "model": "test-model"},
+        {"base_url": "https:///v1", "api_key": "secret", "model": "test-model"},
+        {"base_url": 123, "api_key": "secret", "model": "test-model"},
         {"base_url": "https://api.example.com/v1", "api_key": " ", "model": "test-model"},
+        {"base_url": "https://api.example.com/v1", "api_key": 123, "model": "test-model"},
         {"base_url": "https://api.example.com/v1", "api_key": "secret", "model": ""},
+        {"base_url": "https://api.example.com/v1", "api_key": "secret", "model": 123},
         {
             "base_url": "https://api.example.com/v1",
             "api_key": "secret",

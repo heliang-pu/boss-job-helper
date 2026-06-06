@@ -204,6 +204,12 @@ async def test_match_ignores_blank_blocked_company_entries() -> None:
         {"score": "high", "reasons": [], "risks": [], "greeting": "您好"},
         {"score": 88, "reasons": "匹配", "risks": [], "greeting": "您好"},
         {"score": 88, "reasons": [], "risks": [], "greeting": "您好", "extra": "nope"},
+        {"score": 88, "reasons": [], "risks": [], "greeting": ""},
+        {"score": 88, "reasons": [], "risks": [], "greeting": "   "},
+        {"score": 88, "reasons": ["   "], "risks": [], "greeting": "您好"},
+        {"score": 88, "reasons": [], "risks": [""], "greeting": "您好"},
+        {"score": 88, "reasons": ["匹配"] * 11, "risks": [], "greeting": "您好"},
+        {"score": 88, "reasons": [], "risks": [], "greeting": "您" * 501},
     ],
 )
 async def test_match_wraps_invalid_ai_match_output(ai_response: dict) -> None:
@@ -229,6 +235,10 @@ async def test_match_wraps_invalid_ai_match_output(ai_response: dict) -> None:
     [
         ("今日发布", 1, True, None),
         ("刚刚发布", 1, True, None),
+        ("30分钟前发布", 1, True, None),
+        ("30分钟前", 1, True, None),
+        ("1小时前发布", 1, True, None),
+        ("1小时前", 1, True, None),
         ("3天前", 3, True, None),
         ("30天前", 7, False, "发布时间不满足"),
         ("未知发布", 7, False, "发布时间无法解析"),

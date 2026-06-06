@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import Protocol
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from job_apply_assistant.models import JobPosting, MatchResult, ResumeProfile, SearchPreference
 
@@ -16,9 +16,30 @@ class AIMatchResponse(BaseModel):
     model_config = ConfigDict(strict=True, extra="forbid")
 
     score: int = Field(ge=0, le=100)
-    reasons: list[str]
-    risks: list[str]
-    greeting: str
+    reasons: list[str] = Field(max_length=10)
+    risks: list[str] = Field(max_length=10)
+    greeting: str = Field(max_length=500)
+
+    @field_validator("reasons", "risks")
+    @classmethod
+    def validate_text_list(cls, values: list[str]) -> list[str]:
+        cleaned_values: list[str] = []
+        for value in values:
+            cleaned_value = value.strip()
+            if not cleaned_value:
+                raise ValueError("list items must not be blank")
+            if len(cleaned_value) > 200:
+                raise ValueError("list items must be at most 200 characters")
+            cleaned_values.append(cleaned_value)
+        return cleaned_values
+
+    @field_validator("greeting")
+    @classmethod
+    def validate_greeting(cls, value: str) -> str:
+        cleaned_value = value.strip()
+        if not cleaned_value:
+            raise ValueError("greeting must not be blank")
+        return cleaned_value
 
 
 class JsonCompletionClient(Protocol):
@@ -124,6 +145,8 @@ class MatchingService:
             return None
         normalized = published_text.strip()
         if any(word in normalized for word in ["刚刚发布", "今日发布", "今天发布"]):
+            return 0
+        if re.search(r"\d+\s*(?:分钟|小时)前(?:发布)?", normalized):
             return 0
         if "昨天" in normalized:
             return 1

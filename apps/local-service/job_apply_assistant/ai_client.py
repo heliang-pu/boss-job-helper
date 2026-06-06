@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 
@@ -29,10 +30,16 @@ class AIConfig:
 
     def __post_init__(self) -> None:
         for field_name in ["base_url", "api_key", "model"]:
-            value = getattr(self, field_name).strip()
+            raw_value = getattr(self, field_name)
+            if not isinstance(raw_value, str):
+                raise ValueError(f"{field_name} must be a string")
+            value = raw_value.strip()
             if not value:
                 raise ValueError(f"{field_name} must not be empty")
             object.__setattr__(self, field_name, value)
+        parsed_base_url = urlparse(self.base_url)
+        if parsed_base_url.scheme not in {"http", "https"} or not parsed_base_url.netloc:
+            raise ValueError("base_url must be an HTTP or HTTPS URL with a host")
         if self.timeout_seconds <= 0:
             raise ValueError("timeout_seconds must be positive")
 
