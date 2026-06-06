@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from datetime import datetime, timezone
 from typing import Literal
+from urllib.parse import urlparse
 from uuid import uuid4
 
 from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, TypeAdapter, field_validator, model_validator
@@ -47,6 +48,7 @@ class JobPosting(WireModel):
     salary_text: str = Field(alias="salaryText")
     experience_text: str | None = Field(default=None, alias="experienceText")
     education_text: str | None = Field(default=None, alias="educationText")
+    industry_text: str | None = Field(default=None, alias="industryText")
     description: str
     boss_active_text: str | None = Field(default=None, alias="bossActiveText")
     published_text: str | None = Field(default=None, alias="publishedText")
@@ -56,6 +58,13 @@ class JobPosting(WireModel):
     def validate_url(cls, value: str) -> str:
         cleaned = require_non_blank_string(value)
         HTTP_URL_ADAPTER.validate_python(cleaned)
+        parsed_url = urlparse(cleaned)
+        if (
+            parsed_url.scheme != "https"
+            or parsed_url.netloc != "www.zhipin.com"
+            or not parsed_url.path.startswith("/")
+        ):
+            raise ValueError("Boss job URL must start with https://www.zhipin.com/")
         return cleaned
 
     @field_validator("title", "company_name", "city", "salary_text", "description")
@@ -63,7 +72,9 @@ class JobPosting(WireModel):
     def require_core_strings(cls, value: str) -> str:
         return require_non_blank_string(value)
 
-    @field_validator("experience_text", "education_text", "boss_active_text", "published_text")
+    @field_validator(
+        "experience_text", "education_text", "industry_text", "boss_active_text", "published_text"
+    )
     @classmethod
     def require_optional_strings(cls, value: str | None) -> str | None:
         return require_optional_non_blank_string(value)

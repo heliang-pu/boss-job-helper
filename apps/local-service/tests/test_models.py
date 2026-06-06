@@ -280,13 +280,38 @@ def test_job_posting_rejects_invalid_url() -> None:
         JobPosting(**{**valid_job_posting_kwargs(), "url": "not-a-url"})
 
 
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://www.zhipin.com/job_detail/abc.html",
+        "https://m.zhipin.com/job_detail/abc.html",
+        "https://example.com/job_detail/abc.html",
+        "https://www.zhipin.com.evil.example/job_detail/abc.html",
+    ],
+)
+def test_job_posting_rejects_non_boss_urls(url: str) -> None:
+    with pytest.raises(ValidationError):
+        JobPosting(**{**valid_job_posting_kwargs(), "url": url})
+
+
+def test_job_posting_accepts_boss_url_and_industry_text_round_trip() -> None:
+    job = JobPosting(**{**valid_job_posting_kwargs(), "industryText": " 智能制造 "})
+
+    assert job.url == "https://www.zhipin.com/job_detail/abc.html"
+    assert job.industry_text == "智能制造"
+    assert job.to_wire()["industryText"] == "智能制造"
+
+
 @pytest.mark.parametrize("field", ["url", "title", "company_name", "city", "salary_text", "description"])
 def test_job_posting_rejects_empty_required_strings(field: str) -> None:
     with pytest.raises(ValidationError):
         JobPosting(**{**valid_job_posting_kwargs(), field: "  "})
 
 
-@pytest.mark.parametrize("field", ["experience_text", "education_text", "boss_active_text", "published_text"])
+@pytest.mark.parametrize(
+    "field",
+    ["experience_text", "education_text", "boss_active_text", "published_text", "industry_text"],
+)
 def test_job_posting_rejects_empty_optional_strings_when_present(field: str) -> None:
     with pytest.raises(ValidationError):
         JobPosting(**{**valid_job_posting_kwargs(), field: "  "})

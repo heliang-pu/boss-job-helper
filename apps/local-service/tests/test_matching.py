@@ -145,6 +145,55 @@ async def test_match_filters_blocked_company_before_ai_call() -> None:
 
 
 @pytest.mark.asyncio
+async def test_match_filters_blocked_industry_before_ai_call() -> None:
+    preference = make_preference()
+    preference.blocked_industries[:] = ["金融"]
+    job = JobPosting(
+        source="boss",
+        url="https://www.zhipin.com/job_detail/industry-blocked.html",
+        title="机器人软件工程师",
+        companyName="示例科技",
+        city="上海",
+        salaryText="25-40K",
+        description="ROS Python 机器人控制",
+        industryText="互联网金融",
+        bossActiveText="刚刚活跃",
+        publishedText="今日发布",
+    )
+    ai_client = FakeAIClient()
+
+    result = await MatchingService(ai_client).match(job, make_resume(), preference)
+
+    assert result.should_queue is False
+    assert "行业在黑名单中" in result.hard_filter_reasons
+    assert ai_client.calls == 0
+
+
+@pytest.mark.asyncio
+async def test_match_fails_closed_when_blocked_industries_configured_and_job_industry_missing() -> None:
+    preference = make_preference()
+    preference.blocked_industries[:] = ["金融"]
+    job = JobPosting(
+        source="boss",
+        url="https://www.zhipin.com/job_detail/industry-missing.html",
+        title="机器人软件工程师",
+        companyName="示例科技",
+        city="上海",
+        salaryText="25-40K",
+        description="ROS Python 机器人控制",
+        bossActiveText="刚刚活跃",
+        publishedText="今日发布",
+    )
+    ai_client = FakeAIClient()
+
+    result = await MatchingService(ai_client).match(job, make_resume(), preference)
+
+    assert result.should_queue is False
+    assert "行业信息无法解析" in result.hard_filter_reasons
+    assert ai_client.calls == 0
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("salary_text", "should_queue", "expected_reason"),
     [
@@ -214,6 +263,30 @@ async def test_match_ignores_blank_blocked_company_entries() -> None:
     result = await MatchingService(ai_client).match(job, make_resume(), preference)
 
     assert result.should_queue is True
+    assert ai_client.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_match_ignores_blank_blocked_industry_entries() -> None:
+    preference = make_preference()
+    preference.blocked_industries[:] = ["", "   "]
+    job = JobPosting(
+        source="boss",
+        url="https://www.zhipin.com/job_detail/blank-industry-block.html",
+        title="机器人软件工程师",
+        companyName="示例科技",
+        city="上海",
+        salaryText="25-40K",
+        description="ROS Python 机器人控制",
+        bossActiveText="刚刚活跃",
+        publishedText="今日发布",
+    )
+    ai_client = FakeAIClient()
+
+    result = await MatchingService(ai_client).match(job, make_resume(), preference)
+
+    assert result.should_queue is True
+    assert result.hard_filter_reasons == []
     assert ai_client.calls == 1
 
 

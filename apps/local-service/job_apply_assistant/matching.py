@@ -107,6 +107,13 @@ class MatchingService:
         blocked_companies = [blocked.strip() for blocked in preference.blocked_companies if blocked.strip()]
         if any(blocked in job.company_name for blocked in blocked_companies):
             reasons.append("公司在黑名单中")
+        blocked_industries = [blocked.strip() for blocked in preference.blocked_industries if blocked.strip()]
+        if blocked_industries:
+            industry_text = job.industry_text.strip() if job.industry_text is not None else None
+            if not industry_text:
+                reasons.append("行业信息无法解析")
+            elif any(blocked in industry_text for blocked in blocked_industries):
+                reasons.append("行业在黑名单中")
         if not any(
             keyword.lower() in f"{job.title} {job.description}".lower() for keyword in preference.keywords
         ):
