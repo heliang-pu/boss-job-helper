@@ -65,7 +65,7 @@ def test_queue_returns_next_task_inside_window_and_marks_it_applying() -> None:
 
     assert selected is task
     assert task.status == "applying"
-    assert task.updated_at.endswith("Z")
+    assert task.updated_at == "2026-06-06T10:00:00Z"
     assert queue.pause_reason is None
 
 
@@ -84,6 +84,23 @@ def test_queue_pauses_after_daily_limit() -> None:
 
     assert selected is None
     assert queue.pause_reason == "达到每日上限"
+
+
+def test_next_task_blocks_dispatch_while_another_task_is_applying() -> None:
+    queue = ApplyQueue()
+    preference = make_preference(daily_limit=1)
+    first = make_task(url="https://www.zhipin.com/job_detail/in-flight-1.html")
+    second = make_task(url="https://www.zhipin.com/job_detail/in-flight-2.html")
+    queue.enqueue(first)
+    queue.enqueue(second)
+
+    selected = queue.next_task(preference, inside_window_now())
+    assert selected is first
+    selected_again = queue.next_task(preference, inside_window_now())
+
+    assert selected_again is None
+    assert second.status == "queued"
+    assert queue.pause_reason == "已有投递进行中"
 
 
 def test_queue_ignores_duplicate_enqueue_by_job_url() -> None:
@@ -139,6 +156,9 @@ def test_next_task_clears_previous_pause_reason_when_unblocked() -> None:
 def test_mark_manual_action_sets_status_failure_reason_and_pause_reason() -> None:
     queue = ApplyQueue()
     task = make_task()
+    queue.enqueue(task)
+    selected = queue.next_task(make_preference(), inside_window_now())
+    assert selected is task
 
     queue.mark_manual_action(task, "  需要人工确认  ")
 
@@ -146,6 +166,19 @@ def test_mark_manual_action_sets_status_failure_reason_and_pause_reason() -> Non
     assert task.failure_reason == "需要人工确认"
     assert task.updated_at.endswith("Z")
     assert queue.pause_reason == "需要人工确认"
+
+
+@pytest.mark.parametrize(
+    "status",
+    ["pending_review", "queued", "applied", "filtered", "failed", "needs_manual_action", "paused"],
+)
+def test_mark_manual_action_rejects_non_applying_task(status: str) -> None:
+    queue = ApplyQueue()
+    task = make_task()
+    task.status = status
+
+    with pytest.raises(ValueError, match="applying"):
+        queue.mark_manual_action(task, "需要人工确认")
 
 
 def test_mark_applied_sets_utc_timestamps_and_increments_daily_count() -> None:

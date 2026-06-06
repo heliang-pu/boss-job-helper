@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, timezone
 
-from job_apply_assistant.models import ApplyTask, SearchPreference, utc_now_iso
+from job_apply_assistant.models import ApplyTask, SearchPreference
 
 
 class ApplyQueue:
@@ -28,11 +28,14 @@ class ApplyQueue:
         if not self._inside_window(preference, now):
             self.pause_reason = "当前时间不在投递时间段"
             return None
+        if any(task.status == "applying" for task in self.tasks):
+            self.pause_reason = "已有投递进行中"
+            return None
 
         for task in self.tasks:
             if task.status == "queued":
                 task.status = "applying"
-                task.updated_at = utc_now_iso()
+                task.updated_at = self._utc_iso(now)
                 return task
         return None
 
@@ -51,13 +54,16 @@ class ApplyQueue:
         self.applied_today += 1
 
     def mark_manual_action(self, task: ApplyTask, reason: str) -> None:
+        if task.status != "applying":
+            raise ValueError("only applying tasks can be marked for manual action")
+
         cleaned_reason = reason.strip()
         if not cleaned_reason:
             raise ValueError("reason must not be empty")
 
         task.status = "needs_manual_action"
         task.failure_reason = cleaned_reason
-        task.updated_at = utc_now_iso()
+        task.updated_at = self._utc_iso(datetime.now(timezone.utc))
         self.pause_reason = cleaned_reason
 
     def _inside_window(self, preference: SearchPreference, now: datetime) -> bool:
