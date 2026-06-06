@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 from typing import Literal
 from uuid import uuid4
@@ -8,7 +9,7 @@ from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, TypeAdapter, fiel
 
 
 APPLY_WINDOW_PATTERN = r"^([01]\d|2[0-3]):[0-5]\d$"
-DATETIME_ADAPTER = TypeAdapter(datetime)
+UTC_DATETIME_PATTERN = r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$"
 HTTP_URL_ADAPTER = TypeAdapter(AnyHttpUrl)
 
 
@@ -154,7 +155,12 @@ class ApplyTask(BaseModel):
     def validate_datetime_string(cls, value: str | None) -> str | None:
         if value is None:
             return value
-        DATETIME_ADAPTER.validate_python(value)
+        if not re.fullmatch(UTC_DATETIME_PATTERN, value):
+            raise ValueError("datetime string must be UTC ISO format ending in Z")
+        try:
+            datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ValueError("datetime string must be a valid datetime") from exc
         return value
 
     @classmethod

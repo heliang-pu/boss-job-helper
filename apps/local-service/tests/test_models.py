@@ -1,7 +1,14 @@
 from pydantic import ValidationError
 import pytest
 
-from job_apply_assistant.models import ApplyTask, JobPosting, MatchResult, ResumeProfile, SearchPreference
+from job_apply_assistant.models import (
+    ApplyTask,
+    JobPosting,
+    MatchResult,
+    ResumeProfile,
+    SearchPreference,
+    utc_now_iso,
+)
 
 
 def valid_search_preference_kwargs() -> dict[str, object]:
@@ -248,3 +255,41 @@ def test_apply_task_rejects_invalid_datetimes(field: str) -> None:
 
     with pytest.raises(ValidationError):
         ApplyTask(**task_kwargs)
+
+
+@pytest.mark.parametrize("timestamp", ["2026-06-06T10:00:00Z", "2026-06-06T10:00:00.000Z"])
+def test_apply_task_accepts_utc_z_datetimes(timestamp: str) -> None:
+    match = valid_match_result()
+
+    task = ApplyTask(
+        id="task_1",
+        job=valid_job_posting(),
+        status="queued",
+        match=match,
+        greeting=match.greeting,
+        createdAt=timestamp,
+        updatedAt=utc_now_iso(),
+        appliedAt=timestamp,
+    )
+
+    assert task.created_at == timestamp
+    assert task.applied_at == timestamp
+
+
+@pytest.mark.parametrize(
+    "timestamp",
+    ["2026-06-06", "2026-06-06T00:00:00", "2026-06-06T00:00:00+08:00"],
+)
+def test_apply_task_rejects_non_utc_z_datetimes(timestamp: str) -> None:
+    match = valid_match_result()
+
+    with pytest.raises(ValidationError):
+        ApplyTask(
+            id="task_1",
+            job=valid_job_posting(),
+            status="queued",
+            match=match,
+            greeting=match.greeting,
+            createdAt=timestamp,
+            updatedAt="2026-06-06T10:00:00Z",
+        )
