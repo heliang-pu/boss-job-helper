@@ -20,6 +20,7 @@ export class BossAdapter {
 
   private extractCard(card: Element): JobPosting | null {
     const link = card.querySelector<HTMLAnchorElement>(".job-card-left");
+    const href = link?.getAttribute("href")?.trim() || undefined;
     const title = text(card, ".job-name");
     const city = text(card, ".job-area");
     const salaryText = text(card, ".salary");
@@ -29,13 +30,13 @@ export class BossAdapter {
     );
     const description = text(card, ".job-desc");
 
-    if (!link?.href || !title || !city || !salaryText || !companyName || !description) {
+    if (!href || !title || !city || !salaryText || !companyName || !description) {
       return null;
     }
 
     return JobPostingSchema.parse({
       source: "boss",
-      url: absoluteBossUrl(link.getAttribute("href") ?? link.href),
+      url: absoluteBossUrl(href),
       title,
       companyName,
       city,
