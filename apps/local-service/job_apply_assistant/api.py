@@ -25,12 +25,12 @@ MatchServiceFactory = Callable[[AIConfig], MatchService]
 
 
 class AIConfigRequest(BaseModel):
-    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+    model_config = ConfigDict(populate_by_name=True, strict=True, extra="forbid")
 
     base_url: str = Field(alias="baseUrl")
     api_key: str = Field(alias="apiKey")
     model: str
-    timeout_seconds: float = Field(default=30.0, alias="timeoutSeconds")
+    timeout_seconds: int | float = Field(default=30.0, alias="timeoutSeconds", gt=0, le=300)
 
     def to_config(self) -> AIConfig:
         return AIConfig(

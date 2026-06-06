@@ -113,6 +113,17 @@ def test_health_returns_ok_status() -> None:
     assert response.json() == {"status": "ok", "service": "job-apply-assistant-local-service"}
 
 
+def test_docs_and_openapi_are_not_exposed() -> None:
+    client = TestClient(create_app())
+
+    for path in ["/docs", "/redoc", "/openapi.json"]:
+        response = client.get(path)
+
+        assert response.status_code == 404
+
+    assert client.get("/health").status_code == 200
+
+
 def test_match_without_ai_config_returns_400_before_matching() -> None:
     created_services: list[FakeMatchingService] = []
 
@@ -297,6 +308,26 @@ def test_match_validation_errors_redact_ai_config_key_locations(
     assert '"input"' not in response.text
     detail = response.json()["detail"]
     assert any("<secret>" in error["loc"] for error in detail)
+
+
+def test_match_rejects_bool_timeout_seconds_before_matching() -> None:
+    created_services: list[FakeMatchingService] = []
+
+    def factory(config: AIConfig) -> FakeMatchingService:
+        service = FakeMatchingService()
+        created_services.append(service)
+        return service
+
+    client = TestClient(create_app(match_service_factory=factory))
+    payload = make_match_payload()
+    assert isinstance(payload["aiConfig"], dict)
+    payload["aiConfig"]["timeoutSeconds"] = True
+
+    response = client.post("/match", json=payload)
+
+    assert response.status_code == 422
+    assert '"input"' not in response.text
+    assert created_services == []
 
 
 def test_chrome_extension_cors_preflight_is_allowed() -> None:

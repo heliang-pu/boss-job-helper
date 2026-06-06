@@ -48,7 +48,12 @@ async def _validation_exception_handler(
 
 
 def create_app(match_service_factory: MatchServiceFactory | None = None) -> FastAPI:
-    app = FastAPI(title="Job Apply Assistant Local Service")
+    app = FastAPI(
+        title="Job Apply Assistant Local Service",
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
+    )
     app.add_exception_handler(RequestValidationError, _validation_exception_handler)
     app.add_middleware(
         CORSMiddleware,
