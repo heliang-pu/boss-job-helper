@@ -29,13 +29,14 @@ SKILL_KEYWORDS = [
 class ResumeParser:
     def parse(self, path: Path) -> ResumeProfile:
         suffix = path.suffix.lower()
-        if suffix == ".pdf":
-            text = self._extract_pdf(path)
-        elif suffix == ".docx":
-            text = self._extract_docx(path)
-        else:
+        if suffix not in {".pdf", ".docx"}:
             file_type = suffix or "no extension"
             raise ValueError(f"Unsupported resume file type: {file_type}")
+
+        try:
+            text = self._extract_pdf(path) if suffix == ".pdf" else self._extract_docx(path)
+        except Exception as exc:
+            raise ValueError(f"Could not extract resume text from {path.name}") from exc
 
         cleaned = self._normalize_text(text)
         if not cleaned:

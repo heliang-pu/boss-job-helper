@@ -125,6 +125,34 @@ def test_reject_empty_docx_resume(tmp_path: Path) -> None:
         raise AssertionError("empty resume should raise ValueError")
 
 
+def test_reject_corrupt_pdf_with_parser_error(tmp_path: Path) -> None:
+    path = tmp_path / "resume.pdf"
+    path.write_bytes(b"not a pdf")
+
+    try:
+        ResumeParser().parse(path)
+    except ValueError as exc:
+        message = str(exc)
+        assert "resume.pdf" in message
+        assert "Could not extract resume text" in message
+    else:
+        raise AssertionError("corrupt PDF should raise ValueError")
+
+
+def test_reject_corrupt_docx_with_parser_error(tmp_path: Path) -> None:
+    path = tmp_path / "resume.docx"
+    path.write_bytes(b"not a docx")
+
+    try:
+        ResumeParser().parse(path)
+    except ValueError as exc:
+        message = str(exc)
+        assert "resume.docx" in message
+        assert "Could not extract resume text" in message
+    else:
+        raise AssertionError("corrupt DOCX should raise ValueError")
+
+
 def test_reject_file_without_extension(tmp_path: Path) -> None:
     path = tmp_path / "resume"
     path.write_text("plain text", encoding="utf-8")
