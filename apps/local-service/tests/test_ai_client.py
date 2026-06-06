@@ -18,6 +18,7 @@ from job_apply_assistant.ai_client import AIClient, AIConfig, AIResponseError
         {"base_url": "https://api.example.com/v1?x=1", "api_key": "secret", "model": "test-model"},
         {"base_url": "https://api.example.com/v1#frag", "api_key": "secret", "model": "test-model"},
         {"base_url": "https://user:pass@api.example.com/v1", "api_key": "secret", "model": "test-model"},
+        {"base_url": "http://api.example.com/v1", "api_key": "secret", "model": "test-model"},
         {"base_url": "https://api example.com/v1", "api_key": "secret", "model": "test-model"},
         {"base_url": "https://api.example.com/v1 bad", "api_key": "secret", "model": "test-model"},
         {"base_url": "http://exa\tmple.com", "api_key": "secret", "model": "test-model"},
@@ -58,11 +59,31 @@ from job_apply_assistant.ai_client import AIClient, AIConfig, AIResponseError
             "model": "test-model",
             "timeout_seconds": 0,
         },
+        {
+            "base_url": "https://api.example.com/v1",
+            "api_key": "secret",
+            "model": "test-model",
+            "timeout_seconds": 301,
+        },
     ],
 )
 def test_ai_config_rejects_invalid_values(config_kwargs: dict) -> None:
     with pytest.raises(ValueError):
         AIConfig(**config_kwargs)
+
+
+@pytest.mark.parametrize(
+    "base_url",
+    [
+        "http://localhost:8000/v1",
+        "http://127.0.0.1:8000/v1",
+        "http://127.0.0.2:8000/v1",
+        "http://[::1]:8000/v1",
+        "https://api.example.com/v1",
+    ],
+)
+def test_ai_config_accepts_https_and_loopback_http(base_url: str) -> None:
+    assert AIConfig(base_url=base_url, api_key="secret", model="test-model").base_url == base_url
 
 
 @pytest.mark.asyncio

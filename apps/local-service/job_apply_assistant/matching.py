@@ -126,20 +126,23 @@ class MatchingService:
 
     def _parse_salary_range(self, salary_text: str) -> tuple[int, int] | None:
         normalized = salary_text.strip()
+        safe_suffix = r"(?:\s*(?:·\s*\d+薪|/\s*月))?"
         if "年薪" in normalized or re.search(r"万\s*/\s*年", normalized):
             return None
-        wan_range_match = re.search(r"(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)\s*万", normalized)
+        wan_range_match = re.fullmatch(
+            rf"(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)\s*万{safe_suffix}", normalized
+        )
         if wan_range_match:
             return self._valid_salary_range(
                 self._wan_to_k(wan_range_match.group(1)),
                 self._wan_to_k(wan_range_match.group(2)),
             )
 
-        k_range_match = re.search(r"(\d+)\s*K?\s*-\s*(\d+)\s*K", normalized, re.IGNORECASE)
+        k_range_match = re.fullmatch(rf"(\d+)\s*K?\s*-\s*(\d+)\s*K{safe_suffix}", normalized, re.IGNORECASE)
         if k_range_match:
             return self._valid_salary_range(int(k_range_match.group(1)), int(k_range_match.group(2)))
 
-        k_min_match = re.search(r"(\d+)\s*K\s*以上", normalized, re.IGNORECASE)
+        k_min_match = re.fullmatch(rf"(\d+)\s*K\s*以上{safe_suffix}", normalized, re.IGNORECASE)
         if k_min_match:
             return int(k_min_match.group(1)), 1_000_000
 
@@ -174,7 +177,11 @@ class MatchingService:
 
     def _city_matches(self, job_city: str, target_cities: list[str]) -> bool:
         normalized_job_city = self._normalize_city(job_city)
-        return any(normalized_job_city == self._normalize_city(target_city) for target_city in target_cities)
+        return any(
+            normalized_job_city == self._normalize_city(target_city)
+            or normalized_job_city.startswith(self._normalize_city(target_city))
+            for target_city in target_cities
+        )
 
     def _normalize_city(self, city: str) -> str:
         primary_city = re.split(r"[·\s]+", city.strip(), maxsplit=1)[0]
@@ -187,7 +194,7 @@ class MatchingService:
         if not normalized:
             return None
 
-        inactive_words = ["本月活跃", "很久没活跃", "半年前活跃", "不活跃"]
+        inactive_words = ["本月活跃", "很久没活跃", "半年前活跃", "不活跃", "不在线", "当前不在线", "未在线"]
         if any(word in normalized for word in inactive_words):
             return False
 

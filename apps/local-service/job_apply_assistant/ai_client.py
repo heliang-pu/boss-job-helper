@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+from ipaddress import ip_address
 from dataclasses import dataclass
 from numbers import Real
 from typing import Any
@@ -64,6 +65,8 @@ class AIConfig:
             raise ValueError("base_url must not contain query, fragment, or userinfo")
         if parsed_base_url.scheme not in {"http", "https"} or not parsed_base_url.hostname:
             raise ValueError("base_url must be an HTTP or HTTPS URL with a host")
+        if parsed_base_url.scheme == "http" and not self._is_loopback_host(parsed_base_url.hostname):
+            raise ValueError("http base_url is only allowed for loopback hosts")
         if (
             isinstance(self.timeout_seconds, bool)
             or not isinstance(self.timeout_seconds, Real)
@@ -72,6 +75,16 @@ class AIConfig:
             raise ValueError("timeout_seconds must be a finite number")
         if self.timeout_seconds <= 0:
             raise ValueError("timeout_seconds must be positive")
+        if self.timeout_seconds > 300:
+            raise ValueError("timeout_seconds must be <= 300")
+
+    def _is_loopback_host(self, hostname: str) -> bool:
+        if hostname.lower() == "localhost":
+            return True
+        try:
+            return ip_address(hostname).is_loopback
+        except ValueError:
+            return False
 
 
 class AIClient:

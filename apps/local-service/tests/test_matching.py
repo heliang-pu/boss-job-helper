@@ -88,8 +88,18 @@ async def test_match_passes_when_hard_filters_and_ai_score_pass() -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("city", ["上海·浦东新区", " 上海 浦东新区 "])
-async def test_match_accepts_district_level_city_matches(city: str) -> None:
+@pytest.mark.parametrize(
+    ("city", "target_city"),
+    [
+        ("上海·浦东新区", "上海"),
+        (" 上海 浦东新区 ", "上海"),
+        ("上海市浦东新区", "上海"),
+        ("北京市朝阳区", "北京"),
+    ],
+)
+async def test_match_accepts_district_level_city_matches(city: str, target_city: str) -> None:
+    preference = make_preference()
+    preference.target_cities[:] = [target_city]
     job = JobPosting(
         source="boss",
         url="https://www.zhipin.com/job_detail/7.html",
@@ -103,7 +113,7 @@ async def test_match_accepts_district_level_city_matches(city: str) -> None:
     )
     ai_client = FakeAIClient()
 
-    result = await MatchingService(ai_client).match(job, make_resume(), make_preference())
+    result = await MatchingService(ai_client).match(job, make_resume(), preference)
 
     assert result.should_queue is True
     assert result.hard_filter_reasons == []
@@ -141,10 +151,14 @@ async def test_match_filters_blocked_company_before_ai_call() -> None:
         ("2-4万", True, None),
         ("2.5-4万", True, None),
         ("20K以上", True, None),
+        ("25-40K·13薪", True, None),
+        ("25-40K/月", True, None),
         ("10-15K", False, "薪资范围不匹配"),
         ("40-25K", False, "薪资无法解析"),
         ("30-50万/年", False, "薪资无法解析"),
         ("年薪30-50万", False, "薪资无法解析"),
+        ("25-40K/天", False, "薪资无法解析"),
+        ("abc25-40Kzzz", False, "薪资无法解析"),
         ("薪资面议", False, "薪资无法解析"),
     ],
 )
@@ -290,6 +304,9 @@ async def test_match_filters_by_published_recency(
         ({"city": "北京"}, "城市不匹配"),
         ({"title": "后端工程师", "description": "Java 服务端开发"}, "岗位关键词不匹配"),
         ({"bossActiveText": "很久没活跃"}, "Boss 活跃度不满足"),
+        ({"bossActiveText": "不在线"}, "Boss 活跃度不满足"),
+        ({"bossActiveText": "当前不在线"}, "Boss 活跃度不满足"),
+        ({"bossActiveText": "未在线"}, "Boss 活跃度不满足"),
         ({"bossActiveText": "活跃状态未知"}, "Boss 活跃度无法解析"),
         ({"bossActiveText": None}, "Boss 活跃度无法解析"),
     ],
