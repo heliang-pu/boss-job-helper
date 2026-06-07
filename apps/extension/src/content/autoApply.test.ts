@@ -388,6 +388,50 @@ describe("executeAutoApply", () => {
     expect(result.success).toBe(true);
   });
 
+  it("keeps looking for the Boss default greeting popup while waiting for the chat input", async () => {
+    document.body.innerHTML = `
+      <button class="job-primary-action">继续沟通</button>
+    `;
+    const startButton = document.querySelector(".job-primary-action") as HTMLButtonElement;
+    startButton.addEventListener("click", () => {
+      setTimeout(() => {
+        document.body.insertAdjacentHTML(
+          "beforeend",
+          `
+            <section class="boss-confirm-layer">
+              <h2>已向BOSS发送消息</h2>
+              <p>如需修改打招呼内容，请在【消息通知-设置打招呼语】页面修改</p>
+              <span class="continue-action">继续沟通</span>
+            </section>
+          `,
+        );
+        const continueButton = document.querySelector(".continue-action") as HTMLElement;
+        continueButton.addEventListener("click", () => {
+          document.querySelector(".boss-confirm-layer")?.remove();
+          document.body.insertAdjacentHTML(
+            "beforeend",
+            `<div class="chat-input"><textarea></textarea><button class="send-btn">发送</button></div>`,
+          );
+        });
+      }, 6000);
+    });
+
+    const promise = executeAutoApply({
+      jobUrl: "https://www.zhipin.com/job_detail/slow-default-greeting.html",
+      greeting: "您好，我想进一步沟通这个岗位。",
+      companyName: "中国平安",
+      title: "运营助理",
+      createdAt: Date.now(),
+    });
+
+    await vi.runAllTimersAsync();
+    const result = await promise;
+
+    expect(document.querySelector(".boss-confirm-layer")).toBeNull();
+    expect((document.querySelector("textarea") as HTMLTextAreaElement).value).toBe("您好，我想进一步沟通这个岗位。");
+    expect(result.success).toBe(true);
+  });
+
   it("dispatches pointer and mouse events when pressing the send button", async () => {
     document.body.innerHTML = `
       <button class="brand-button">继续沟通</button>

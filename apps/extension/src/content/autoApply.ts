@@ -92,13 +92,8 @@ export async function executeAutoApply(task: ApplyTask): Promise<{ success: bool
   (chatButton as HTMLElement).click();
   await sleep(1500);
 
-  await continuePastDefaultGreetingDialog();
-
   // Step 3: Wait for textarea / input in chat dialog (max 8s)
-  const chatInput = await waitForElement(
-    () => findChatInput(),
-    8000,
-  );
+  const chatInput = await waitForChatInputAfterStartingConversation(10000);
   if (!chatInput) {
     return { success: false, detail: "点击后未出现对话框，请手动处理" };
   }
@@ -245,19 +240,24 @@ function findSendButton(inputEl: HTMLElement): HTMLElement | null {
 }
 
 async function continuePastDefaultGreetingDialog(): Promise<void> {
-  const continueButton = await waitForElement(
-    () => {
-      const defaultGreetingDialog = findDefaultGreetingDialog();
-      if (!defaultGreetingDialog) return null;
-      return findClickableByTextIn(defaultGreetingDialog, ["继续沟通"]);
-    },
-    3000,
-  );
-
+  const defaultGreetingDialog = findDefaultGreetingDialog();
+  const continueButton = defaultGreetingDialog ? findClickableByTextIn(defaultGreetingDialog, ["继续沟通"]) : null;
   if (continueButton) {
     pressSendButton(continueButton as HTMLElement);
     await sleep(1200);
   }
+}
+
+async function waitForChatInputAfterStartingConversation(timeoutMs: number): Promise<HTMLElement | null> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const input = findChatInput();
+    if (input) return input;
+
+    await continuePastDefaultGreetingDialog();
+    await sleep(300);
+  }
+  return findChatInput();
 }
 
 function findDefaultGreetingDialog(): HTMLElement | null {
