@@ -247,13 +247,7 @@ function findSendButton(inputEl: HTMLElement): HTMLElement | null {
 async function continuePastDefaultGreetingDialog(): Promise<void> {
   const continueButton = await waitForElement(
     () => {
-      const dialogs = Array.from(
-        document.querySelectorAll<HTMLElement>("[role='dialog'], .dialog-container, [class*='dialog'], [class*='modal']"),
-      );
-      const defaultGreetingDialog = dialogs.find((dialog) => {
-        const text = (dialog.textContent ?? "").replace(/\s+/g, "");
-        return text.includes("已向BOSS发送消息") || text.includes("修改打招呼内容");
-      });
+      const defaultGreetingDialog = findDefaultGreetingDialog();
       if (!defaultGreetingDialog) return null;
       return findClickableByTextIn(defaultGreetingDialog, ["继续沟通"]);
     },
@@ -264,6 +258,44 @@ async function continuePastDefaultGreetingDialog(): Promise<void> {
     pressSendButton(continueButton as HTMLElement);
     await sleep(1200);
   }
+}
+
+function findDefaultGreetingDialog(): HTMLElement | null {
+  const scopedDialogs = Array.from(
+    document.querySelectorAll<HTMLElement>("[role='dialog'], .dialog-container, [class*='dialog'], [class*='modal']"),
+  );
+  const matchedScopedDialog = scopedDialogs.find(hasDefaultGreetingText);
+  if (matchedScopedDialog) return matchedScopedDialog;
+
+  const textNodes = Array.from(document.querySelectorAll<HTMLElement>("body *")).filter((element) => {
+    if (!isVisibleElement(element)) return false;
+    const ownText = Array.from(element.childNodes)
+      .filter((node) => node.nodeType === Node.TEXT_NODE)
+      .map((node) => node.textContent ?? "")
+      .join("")
+      .replace(/\s+/g, "");
+    return ownText.includes("已向BOSS发送消息") || ownText.includes("修改打招呼内容");
+  });
+  for (const textNode of textNodes) {
+    const container = findAncestorWithContinueButton(textNode);
+    if (container) return container;
+  }
+
+  return null;
+}
+
+function hasDefaultGreetingText(element: HTMLElement): boolean {
+  const text = (element.textContent ?? "").replace(/\s+/g, "");
+  return text.includes("已向BOSS发送消息") || text.includes("修改打招呼内容");
+}
+
+function findAncestorWithContinueButton(element: HTMLElement): HTMLElement | null {
+  let current: HTMLElement | null = element;
+  for (let depth = 0; current && depth < 6; depth += 1) {
+    if (findClickableByTextIn(current, ["继续沟通"])) return current;
+    current = current.parentElement;
+  }
+  return null;
 }
 
 function findClickableByTextIn(root: ParentNode, texts: string[]): HTMLElement | null {

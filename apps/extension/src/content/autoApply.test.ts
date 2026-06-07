@@ -276,6 +276,51 @@ describe("executeAutoApply", () => {
     expect(result.success).toBe(true);
   });
 
+  it("continues through the default greeting popup even when Boss uses non-dialog class names", async () => {
+    document.body.innerHTML = `
+      <button class="job-primary-action">继续沟通</button>
+    `;
+    const startButton = document.querySelector(".job-primary-action") as HTMLButtonElement;
+    startButton.addEventListener("click", () => {
+      document.body.insertAdjacentHTML(
+        "beforeend",
+        `
+          <div class="boss-confirm-layer">
+            <strong>已向BOSS发送消息</strong>
+            <p>如需修改打招呼内容，请在【消息通知-设置打招呼语】页面修改</p>
+            <button class="stay-button">留在此页</button>
+            <button class="continue-button">继续沟通</button>
+          </div>
+        `,
+      );
+      const continueButton = document.querySelector(".continue-button") as HTMLButtonElement;
+      continueButton.addEventListener("click", () => {
+        document.querySelector(".boss-confirm-layer")?.remove();
+        document.body.insertAdjacentHTML(
+          "beforeend",
+          `<div class="chat-input"><textarea></textarea><button class="send-btn">发送</button></div>`,
+        );
+      });
+    });
+
+    const promise = executeAutoApply({
+      jobUrl: "https://www.zhipin.com/job_detail/non-dialog-confirm.html",
+      greeting: "您好，我结合过往运营项目经验，想进一步沟通这个岗位。",
+      companyName: "洛阳甄选华夫品牌管理",
+      title: "运营助理",
+      createdAt: Date.now(),
+    });
+
+    await vi.runAllTimersAsync();
+    const result = await promise;
+
+    expect(document.querySelector(".boss-confirm-layer")).toBeNull();
+    expect((document.querySelector("textarea") as HTMLTextAreaElement).value).toBe(
+      "您好，我结合过往运营项目经验，想进一步沟通这个岗位。",
+    );
+    expect(result.success).toBe(true);
+  });
+
   it("dispatches pointer and mouse events when pressing the send button", async () => {
     document.body.innerHTML = `
       <button class="brand-button">继续沟通</button>
