@@ -83,7 +83,7 @@ function looksLikeJobCard(element: Element): boolean {
     hasJobLink(element) &&
       content.length >= 8 &&
       (/\d+\s*-\s*\d+K|面议/.test(content) || content.includes("薪")) &&
-      (content.includes("上海") || content.includes("北京") || content.includes("深圳") || content.includes("广州")),
+      cityFromText(content),
   );
 }
 
@@ -120,7 +120,9 @@ function salaryFromElement(card: Element, cardText: string | undefined): string 
 }
 
 function cityFromText(value: string | undefined): string | undefined {
-  return value?.match(/上海|北京|深圳|广州|杭州|苏州|南京|成都|武汉|西安|重庆|天津|长沙|合肥|郑州|青岛|宁波/)?.[0];
+  return value?.match(
+    /北京|上海|天津|重庆|深圳|广州|杭州|苏州|南京|成都|武汉|西安|长沙|合肥|郑州|青岛|宁波|厦门|福州|济南|大连|沈阳|长春|哈尔滨|石家庄|太原|呼和浩特|南昌|贵阳|昆明|南宁|海口|兰州|银川|西宁|乌鲁木齐|拉萨|无锡|常州|南通|徐州|扬州|镇江|泰州|盐城|淮安|连云港|宿迁|嘉兴|湖州|绍兴|金华|台州|温州|衢州|舟山|丽水|佛山|东莞|珠海|中山|惠州|江门|汕头|湛江|肇庆|洛阳|开封|新乡|许昌|平顶山|安阳|南阳|商丘|周口|焦作|信阳|漯河|三门峡|驻马店|鹤壁|濮阳|济源/,
+  )?.[0];
 }
 
 function titleFromText(value: string | undefined, salaryText: string | undefined): string | undefined {

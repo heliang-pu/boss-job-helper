@@ -186,6 +186,42 @@ describe("BossAdapter", () => {
     });
   });
 
+  it("extracts Luoyang job cards from the left search result list", () => {
+    document.body.innerHTML = `
+      <main>
+        <section class="job-card-box">
+          <a href="/job_detail/luoyang-one.html">
+            <div class="job-title">运营专员</div>
+            <div class="salary">3-5K</div>
+            <div class="tags">1-3年 大专</div>
+            <div class="company-name">洛阳弘善中医门诊部</div>
+            <div class="job-area">洛阳</div>
+          </a>
+        </section>
+        <section class="job-card-box">
+          <a href="/job_detail/luoyang-two.html">
+            <div class="job-title">客服专员/运营助理</div>
+            <div class="salary">4-9K</div>
+            <div class="tags">经验不限 大专</div>
+            <div class="company-name">洛阳易家达</div>
+            <div class="job-area">洛阳</div>
+          </a>
+        </section>
+        <section class="job-detail">
+          <h1>运营岗/包吃住/接受小白/带薪刷手机</h1>
+        </section>
+      </main>
+    `;
+
+    const adapter = new BossAdapter(document);
+    const jobs = adapter.extractListJobs();
+
+    expect(adapter.detectBlockingCondition()).toBeNull();
+    expect(jobs).toHaveLength(2);
+    expect(jobs.map((job) => job.title)).toEqual(["运营专员", "客服专员/运营助理"]);
+    expect(jobs.map((job) => job.city)).toEqual(["洛阳", "洛阳"]);
+  });
+
   it("decodes Boss private-font salary digits from real search cards", () => {
     document.body.innerHTML = `
       <section class="job-card-box">
