@@ -300,13 +300,20 @@ function findAncestorWithContinueButton(element: HTMLElement): HTMLElement | nul
 
 function findClickableByTextIn(root: ParentNode, texts: string[]): HTMLElement | null {
   const candidates = Array.from(
-    root.querySelectorAll<HTMLElement>("button, a, [role='button'], .btn, [class*='btn']"),
-  );
+    root.querySelectorAll<HTMLElement>(
+      "button, a, [role='button'], .btn, [class*='btn'], [class*='button'], [class*='action'], span, div",
+    ),
+  ).sort((a, b) => getNormalizedText(a).length - getNormalizedText(b).length);
   return candidates.find((candidate) => {
     if (candidate.matches("button:disabled, [aria-disabled='true']")) return false;
-    const text = (candidate.textContent ?? "").replace(/\s+/g, "");
-    return texts.some((target) => text.includes(target));
+    if (!isVisibleElement(candidate)) return false;
+    const text = getNormalizedText(candidate);
+    return texts.some((target) => text === target || text.includes(target));
   }) ?? null;
+}
+
+function getNormalizedText(element: HTMLElement): string {
+  return (element.textContent ?? "").replace(/\s+/g, "");
 }
 
 function isVisibleElement(element: HTMLElement): boolean {
