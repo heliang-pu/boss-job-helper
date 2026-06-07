@@ -1,3 +1,12 @@
+import { FormEvent, useEffect, useState } from "react";
+import {
+  DEFAULT_AI_CONFIG,
+  loadAiConfig,
+  saveAiConfig,
+  type AiConfig,
+  type ExtensionStorageArea,
+} from "../shared/aiConfigStorage";
+
 const sections = [
   {
     title: "简历",
@@ -21,7 +30,45 @@ const sections = [
   },
 ];
 
-export function App() {
+export interface AppProps {
+  storageArea?: ExtensionStorageArea;
+}
+
+export function App({ storageArea }: AppProps) {
+  const [aiConfig, setAiConfig] = useState<AiConfig>(DEFAULT_AI_CONFIG);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saved" | "error">("idle");
+
+  useEffect(() => {
+    let isMounted = true;
+    loadAiConfig(storageArea)
+      .then((storedConfig) => {
+        if (isMounted) setAiConfig(storedConfig);
+      })
+      .catch(() => {
+        if (isMounted) setSaveStatus("error");
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [storageArea]);
+
+  async function handleAiConfigSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSaveStatus("idle");
+
+    try {
+      await saveAiConfig(aiConfig, storageArea);
+      setSaveStatus("saved");
+    } catch {
+      setSaveStatus("error");
+    }
+  }
+
+  function updateAiConfig<K extends keyof AiConfig>(key: K, value: AiConfig[K]) {
+    setAiConfig((current) => ({ ...current, [key]: value }));
+  }
+
   return (
     <main
       style={{
@@ -95,7 +142,98 @@ export function App() {
             </section>
           ))}
         </div>
+
+        <section
+          aria-labelledby="ai-config-title"
+          style={{
+            marginTop: 20,
+            padding: 16,
+            border: "1px solid #e5e7eb",
+            borderRadius: 8,
+            background: "#ffffff",
+            boxSizing: "border-box",
+          }}
+        >
+          <h2 id="ai-config-title" style={{ margin: 0, fontSize: 18, lineHeight: 1.35 }}>
+            AI 配置
+          </h2>
+          <form
+            onSubmit={handleAiConfigSubmit}
+            style={{
+              display: "grid",
+              gap: 12,
+              marginTop: 14,
+              maxWidth: 720,
+            }}
+          >
+            <label style={{ display: "grid", gap: 6, color: "#111827", fontSize: 14 }}>
+              请求地址
+              <input
+                value={aiConfig.baseUrl}
+                onChange={(event) => updateAiConfig("baseUrl", event.target.value)}
+                style={inputStyle}
+                autoComplete="off"
+              />
+            </label>
+            <label style={{ display: "grid", gap: 6, color: "#111827", fontSize: 14 }}>
+              模型
+              <input
+                value={aiConfig.model}
+                onChange={(event) => updateAiConfig("model", event.target.value)}
+                style={inputStyle}
+                autoComplete="off"
+              />
+            </label>
+            <label style={{ display: "grid", gap: 6, color: "#111827", fontSize: 14 }}>
+              API Key
+              <input
+                type="password"
+                value={aiConfig.apiKey}
+                onChange={(event) => updateAiConfig("apiKey", event.target.value)}
+                style={inputStyle}
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </label>
+            <button
+              type="submit"
+              style={{
+                minHeight: 38,
+                width: "fit-content",
+                padding: "0 14px",
+                border: "1px solid #0891b2",
+                borderRadius: 6,
+                background: "#0891b2",
+                color: "#ffffff",
+                font: "inherit",
+                cursor: "pointer",
+              }}
+            >
+              保存 AI 配置
+            </button>
+            {saveStatus === "saved" ? (
+              <p role="status" style={{ margin: 0, color: "#047857", fontSize: 14 }}>
+                AI 配置已保存到本地扩展存储。
+              </p>
+            ) : null}
+            {saveStatus === "error" ? (
+              <p role="alert" style={{ margin: 0, color: "#b91c1c", fontSize: 14 }}>
+                无法读写扩展存储，请重新加载扩展后再试。
+              </p>
+            ) : null}
+          </form>
+        </section>
       </div>
     </main>
   );
 }
+
+const inputStyle = {
+  minHeight: 38,
+  padding: "0 10px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 6,
+  color: "#111827",
+  font: "inherit",
+  boxSizing: "border-box",
+} satisfies React.CSSProperties;

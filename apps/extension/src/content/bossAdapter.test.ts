@@ -24,18 +24,17 @@ describe("BossAdapter", () => {
         educationText: "本科",
         description: "负责 ROS、Python、机器人控制相关开发。",
         bossActiveText: "刚刚活跃",
-        publishedText: undefined,
+        publishedText: "今日发布",
       },
     ]);
   });
 
-  it("skips job cards missing required fields such as the description", () => {
+  it("skips job cards missing required fields such as the salary", () => {
     document.body.innerHTML = `
       <section class="job-card-wrapper">
-        <a class="job-card-left" href="/job_detail/missing-desc.html">
+        <a class="job-card-left" href="/job_detail/missing-salary.html">
           <span class="job-name">机器人软件工程师</span>
           <span class="job-area">上海</span>
-          <span class="salary">25-40K</span>
         </a>
         <div class="company-name">示例科技</div>
       </section>
@@ -44,6 +43,200 @@ describe("BossAdapter", () => {
     const jobs = new BossAdapter(document).extractListJobs();
 
     expect(jobs).toEqual([]);
+  });
+
+  it("extracts modern Boss job cards without a dedicated description node", () => {
+    document.body.innerHTML = `
+      <section class="job-card-box">
+        <a class="job-card-left" href="/job_detail/vla.html">
+          <span class="job-name">具身VLA算法工程师</span>
+          <span class="job-area">上海</span>
+          <span class="salary">30-45K·15薪</span>
+        </a>
+        <div class="company-name">人形机器人</div>
+        <ul class="tag-list">
+          <li>1-3年</li>
+          <li>硕士</li>
+        </ul>
+      </section>
+    `;
+
+    const jobs = new BossAdapter(document).extractListJobs();
+
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({
+      source: "boss",
+      url: "https://www.zhipin.com/job_detail/vla.html",
+      title: "具身VLA算法工程师",
+      companyName: "人形机器人",
+      city: "上海",
+      salaryText: "30-45K·15薪",
+      experienceText: "1-3年",
+      educationText: "硕士",
+    });
+  });
+
+  it("extracts redesigned Boss search cards from job detail links when class names change", () => {
+    document.body.innerHTML = `
+      <main>
+        <div class="search-result-panel">
+          <article class="list-item-current">
+            <a class="primary-link" href="/job_detail/new-vla.html">
+              <span class="position-title">具身VLA算法工程师(人形机器人)</span>
+            </a>
+            <strong class="pay-text">30-45K·15薪</strong>
+            <span class="work-city">上海</span>
+            <span class="requirement">1-3年</span>
+            <span class="requirement">硕士</span>
+            <div class="brand-row">
+              <span class="brand-name">人形机器人</span>
+            </div>
+          </article>
+        </div>
+        <section class="job-detail">
+          <h2>职位描述</h2>
+          <p>负责具身智能 VLA 模型训练与部署。</p>
+        </section>
+      </main>
+    `;
+
+    const adapter = new BossAdapter(document);
+    const jobs = adapter.extractListJobs();
+
+    expect(adapter.detectBlockingCondition()).toBeNull();
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({
+      source: "boss",
+      url: "https://www.zhipin.com/job_detail/new-vla.html",
+      title: "具身VLA算法工程师(人形机器人)",
+      companyName: "人形机器人",
+      city: "上海",
+      salaryText: "30-45K·15薪",
+      publishedText: "今日发布",
+    });
+  });
+
+  it("cleans salary text polluted by icon-font characters", () => {
+    document.body.innerHTML = `
+      <article class="list-item-current">
+        <a class="primary-link" href="/job_detail/icon-font-salary.html">
+          <span class="position-title">具身智能算法工程师</span>
+        </a>
+        <strong class="pay-text">薪资：█30-45K·15薪█</strong>
+        <span class="work-city">上海</span>
+        <span class="brand-name">机器人公司</span>
+      </article>
+    `;
+
+    const jobs = new BossAdapter(document).extractListJobs();
+
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0].salaryText).toBe("30-45K·15薪");
+    expect(jobs[0].publishedText).toBe("今日发布");
+  });
+
+  it("detects job cards when the matching element is itself the job detail link", () => {
+    document.body.innerHTML = `
+      <a class="job-card-box" href="/job_detail/self-link.html">
+        <span class="job-name">具身智能后端开发</span>
+        <span class="salary">25-40K·15薪</span>
+        <span class="job-area">上海</span>
+        <span class="company-name">上海具身智能设备</span>
+      </a>
+    `;
+
+    const adapter = new BossAdapter(document);
+    const jobs = adapter.extractListJobs();
+
+    expect(adapter.detectBlockingCondition()).toBeNull();
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({
+      url: "https://www.zhipin.com/job_detail/self-link.html",
+      title: "具身智能后端开发",
+      companyName: "上海具身智能设备",
+      salaryText: "25-40K·15薪",
+      city: "上海",
+    });
+  });
+
+  it("extracts visible Boss cards when title and company use unstable class names", () => {
+    document.body.innerHTML = `
+      <section class="job-card-box">
+        <a href="/job_detail/current-boss.html">
+          <div class="name">博士招聘-研发技术专家（AI方向）</div>
+          <div class="money">40-50K·15薪</div>
+          <div class="labels">经验不限 博士</div>
+          <div class="org">上海具身智能设备</div>
+          <div class="place">上海 静安区 汶水路</div>
+        </a>
+      </section>
+    `;
+
+    const adapter = new BossAdapter(document);
+    const jobs = adapter.extractListJobs();
+
+    expect(adapter.detectBlockingCondition()).toBeNull();
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({
+      url: "https://www.zhipin.com/job_detail/current-boss.html",
+      title: "博士招聘-研发技术专家（AI方向）",
+      companyName: "上海具身智能设备",
+      city: "上海",
+      salaryText: "40-50K·15薪",
+    });
+  });
+
+  it("decodes Boss private-font salary digits from real search cards", () => {
+    document.body.innerHTML = `
+      <section class="job-card-box">
+        <a href="/job_detail/private-font.html">
+          <div class="name">博士招聘-研发技术专家（AI方向）</div>
+          <div class="money">-K·薪</div>
+          <div class="labels">经验不限 博士</div>
+          <div class="org">上海具身智能设备</div>
+          <div class="place">上海·静安区·汶水路</div>
+        </a>
+      </section>
+    `;
+
+    const jobs = new BossAdapter(document).extractListJobs();
+
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({
+      title: "博士招聘-研发技术专家（AI方向）",
+      salaryText: "40-50K·15薪",
+      companyName: "上海具身智能设备",
+      city: "上海",
+    });
+  });
+
+  it("does not treat logged-in job pages with WeChat scan sharing text as expired login", () => {
+    document.body.innerHTML = `
+      <main>
+        <a class="job-card-left" href="/job_detail/vla.html">
+          <span class="job-name">VLM/VLA 大模型算法工程师</span>
+          <span class="job-area">上海</span>
+          <span class="salary">40-70K·15薪</span>
+        </a>
+        <section class="job-card-box">
+          <a class="job-card-left" href="/job_detail/vla.html">
+            <span class="job-name">VLM/VLA 大模型算法工程师</span>
+            <span class="job-area">上海</span>
+            <span class="salary">40-70K·15薪</span>
+          </a>
+          <div class="company-name">小鹏汽车</div>
+          <ul class="tag-list">
+            <li>经验不限</li>
+            <li>硕士</li>
+          </ul>
+        </section>
+        <a>微信扫码分享</a>
+        <a>登录帮助</a>
+        <a>蒲贺良</a>
+      </main>
+    `;
+
+    expect(new BossAdapter(document).detectBlockingCondition()).toBeNull();
   });
 
   it("skips job cards with a blank link href", () => {
@@ -108,7 +301,7 @@ describe("BossAdapter", () => {
         educationText: undefined,
         description: "负责机器人感知与运动规划。",
         bossActiveText: undefined,
-        publishedText: undefined,
+        publishedText: "今日发布",
       },
     ]);
   });
@@ -153,7 +346,7 @@ describe("BossAdapter", () => {
         educationText: undefined,
         description: "负责机器人感知与运动规划。",
         bossActiveText: undefined,
-        publishedText: undefined,
+        publishedText: "今日发布",
       },
     ]);
   });
@@ -161,7 +354,7 @@ describe("BossAdapter", () => {
   it.each([
     ["验证码", "请完成验证码后继续", "遇到验证码或人机验证"],
     ["人机验证", "当前页面需要人机验证", "遇到验证码或人机验证"],
-    ["登录扫码", "请登录后使用扫码确认", "登录状态失效"],
+    ["扫码登录", "请扫码登录后继续", "登录状态失效"],
     ["账号异常", "账号异常，请稍后再试", "账号异常提示"],
   ])("detects blocking condition: %s", (_, pageText, expected) => {
     document.body.innerHTML = `<main>${pageText}</main>`;

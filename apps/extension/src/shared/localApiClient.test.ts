@@ -1,6 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import manifest from "../../manifest.config";
-import { LocalApiClient } from "./localApiClient";
+import { checkHealth, LocalApiClient } from "./localApiClient";
 
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
@@ -16,6 +16,10 @@ const jsonResponse = (body: unknown, init?: ResponseInit) =>
   });
 
 describe("LocalApiClient", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("health() returns the local service payload and calls the exact /health URL", async () => {
     const fetchMock = vi.fn<FetchLike>().mockResolvedValue(jsonResponse(healthyPayload));
     const client = new LocalApiClient("http://127.0.0.1:8765", fetchMock);
@@ -48,6 +52,23 @@ describe("LocalApiClient", () => {
 
     await client.health();
 
+    expect(fetchMock).toHaveBeenCalledWith("http://127.0.0.1:8765/health");
+  });
+
+  it("checkHealth() falls back to direct fetch when the background receiver is missing", async () => {
+    const fetchMock = vi.fn<FetchLike>().mockResolvedValue(jsonResponse(healthyPayload));
+    const runtime = {
+      lastError: undefined as { message?: string } | undefined,
+      sendMessage: vi.fn((_message: unknown, callback: (response?: unknown) => void) => {
+        runtime.lastError = { message: "Could not establish connection. Receiving end does not exist." };
+        callback(undefined);
+        runtime.lastError = undefined;
+      }),
+    };
+    vi.stubGlobal("chrome", { runtime });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(checkHealth()).resolves.toEqual(healthyPayload);
     expect(fetchMock).toHaveBeenCalledWith("http://127.0.0.1:8765/health");
   });
 });

@@ -3,6 +3,7 @@ dist/
 build/
 *.egg-info/
 .vite/
+.venv/
 .pytest_cache/
 __pycache__/
 *.pyc
@@ -12,4 +13,5 @@ __pycache__/
 .env.*
 !.env.example
 local-data/
+.run/
 .superpowers/

@@ -57,11 +57,10 @@ def create_app(match_service_factory: MatchServiceFactory | None = None) -> Fast
     app.add_exception_handler(RequestValidationError, _validation_exception_handler)
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
-        allow_origin_regex=r"^chrome-extension://[a-p]{32}$",
+        allow_origins=["*"],
         allow_credentials=False,
-        allow_methods=["GET", "POST"],
-        allow_headers=["content-type"],
+        allow_methods=["*"],
+        allow_headers=["*"],
     )
     app.include_router(create_api_router(match_service_factory=match_service_factory))
     return app

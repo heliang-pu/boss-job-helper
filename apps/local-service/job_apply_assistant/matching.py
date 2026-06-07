@@ -74,7 +74,12 @@ class MatchingService:
             )
 
         ai_result = await self.ai_client.complete_json(
-            "你是求职匹配助手。只返回 JSON：score 0-100、reasons 字符串数组、risks 字符串数组、greeting 字符串。",
+            (
+                "你是求职投递助手。根据 payload 里的 resume 和 job.description/JD 深度生成结果。"
+                "greeting 必须是给招聘者的第一句招呼语，结合候选人简历亮点和当前岗位 JD 的具体要求，"
+                "不要写泛泛模板，不要编造简历没有的信息。只返回 JSON：score 0-100、reasons 字符串数组、"
+                "risks 字符串数组、greeting 字符串。"
+            ),
             {
                 "resume": resume.to_wire(),
                 "preference": preference.to_wire(),
@@ -97,13 +102,11 @@ class MatchingService:
             reasons=validated_ai_result.reasons,
             risks=validated_ai_result.risks,
             greeting=validated_ai_result.greeting,
-            shouldQueue=validated_ai_result.score >= preference.match_threshold,
+            shouldQueue=True,
         )
 
     def _hard_filter(self, job: JobPosting, preference: SearchPreference) -> list[str]:
         reasons: list[str] = []
-        if not self._city_matches(job.city, preference.target_cities):
-            reasons.append("城市不匹配")
         blocked_companies = [blocked.strip() for blocked in preference.blocked_companies if blocked.strip()]
         if any(blocked in job.company_name for blocked in blocked_companies):
             reasons.append("公司在黑名单中")
@@ -114,36 +117,16 @@ class MatchingService:
                 reasons.append("行业信息无法解析")
             elif any(blocked in industry_text for blocked in blocked_industries):
                 reasons.append("行业在黑名单中")
-        if not any(
-            keyword.lower() in f"{job.title} {job.description}".lower() for keyword in preference.keywords
-        ):
-            reasons.append("岗位关键词不匹配")
-        if preference.require_active_boss:
-            boss_is_active = self._parse_boss_active(job.boss_active_text)
-            if boss_is_active is None:
-                reasons.append("Boss 活跃度无法解析")
-            elif not boss_is_active:
-                reasons.append("Boss 活跃度不满足")
-        published_days = self._parse_published_days(job.published_text)
-        if published_days is None:
-            reasons.append("发布时间无法解析")
-        elif published_days > preference.recency_days:
-            reasons.append("发布时间不满足")
-        salary_range = self._parse_salary_range(job.salary_text)
-        if salary_range is None:
-            reasons.append("薪资无法解析")
-            return reasons
-
-        salary_min, salary_max = salary_range
-        if salary_max < preference.salary_min_k or salary_min > preference.salary_max_k:
-            reasons.append("薪资范围不匹配")
         return reasons
 
     def _parse_salary_range(self, salary_text: str) -> tuple[int, int] | None:
         normalized = salary_text.strip()
-        safe_suffix = r"(?:\s*(?:·\s*\d+薪|/\s*月))?"
-        if "年薪" in normalized or re.search(r"万\s*/\s*年", normalized):
+        if "年薪" in normalized or re.search(r"万\s*/\s*年|/\s*天", normalized):
             return None
+        normalized = self._extract_salary_fragment(normalized)
+        if normalized is None:
+            return None
+        safe_suffix = r"(?:\s*(?:·\s*\d+薪|/\s*月))?"
         wan_range_match = re.fullmatch(
             rf"(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)\s*万{safe_suffix}", normalized
         )
@@ -168,6 +151,19 @@ class MatchingService:
             return self._valid_salary_range(salary_min, MAX_MONTHLY_SALARY_K)
 
         return None
+
+    def _extract_salary_fragment(self, salary_text: str) -> str | None:
+        if re.fullmatch(r"[\d.\sKk万以上/月·薪-]+", salary_text):
+            return salary_text
+        if re.search(r"[A-Za-z]{2,}", salary_text):
+            return salary_text
+        match = re.search(r"\d+(?:\.\d+)?\s*(?:K|k|万)?\s*-\s*\d+(?:\.\d+)?\s*(?:K|k|万)(?:\s*·\s*\d+薪|/\s*月)?", salary_text)
+        if match:
+            return match.group(0)
+        min_match = re.search(r"\d+\s*K\s*以上(?:\s*·\s*\d+薪|/\s*月)?", salary_text, re.IGNORECASE)
+        if min_match:
+            return min_match.group(0)
+        return salary_text
 
     def _parse_published_days(self, published_text: str | None) -> int | None:
         if published_text is None:

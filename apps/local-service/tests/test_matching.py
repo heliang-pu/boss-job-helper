@@ -195,30 +195,29 @@ async def test_match_fails_closed_when_blocked_industries_configured_and_job_ind
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("salary_text", "should_queue", "expected_reason"),
+    "salary_text",
     [
-        ("25-40K", True, None),
-        ("25K-40K", True, None),
-        ("2-4万", True, None),
-        ("2.5-4万", True, None),
-        ("20K以上", True, None),
-        ("25-40K·13薪", True, None),
-        ("25-40K/月", True, None),
-        ("10-15K", False, "薪资范围不匹配"),
-        ("0-40K", False, "薪资无法解析"),
-        ("1-999999K", False, "薪资无法解析"),
-        ("1-999999万", False, "薪资无法解析"),
-        ("40-25K", False, "薪资无法解析"),
-        ("30-50万/年", False, "薪资无法解析"),
-        ("年薪30-50万", False, "薪资无法解析"),
-        ("25-40K/天", False, "薪资无法解析"),
-        ("abc25-40Kzzz", False, "薪资无法解析"),
-        ("薪资面议", False, "薪资无法解析"),
+        "25-40K",
+        "25K-40K",
+        "2-4万",
+        "2.5-4万",
+        "20K以上",
+        "25-40K·13薪",
+        "25-40K/月",
+        "薪资：█30-45K·15薪█",
+        "10-15K",
+        "0-40K",
+        "1-999999K",
+        "1-999999万",
+        "40-25K",
+        "30-50万/年",
+        "年薪30-50万",
+        "25-40K/天",
+        "abc25-40Kzzz",
+        "薪资面议",
     ],
 )
-async def test_match_filters_common_salary_formats(
-    salary_text: str, should_queue: bool, expected_reason: str | None
-) -> None:
+async def test_match_queues_jobs_without_salary_hard_filter(salary_text: str) -> None:
     job = JobPosting(
         source="boss",
         url=f"https://www.zhipin.com/job_detail/{salary_text}.html",
@@ -234,13 +233,9 @@ async def test_match_filters_common_salary_formats(
 
     result = await MatchingService(ai_client).match(job, make_resume(), make_preference())
 
-    assert result.should_queue is should_queue
-    if expected_reason is None:
-        assert result.hard_filter_reasons == []
-        assert ai_client.calls == 1
-    else:
-        assert expected_reason in result.hard_filter_reasons
-        assert ai_client.calls == 0
+    assert result.should_queue is True
+    assert result.hard_filter_reasons == []
+    assert ai_client.calls == 1
 
 
 @pytest.mark.asyncio
@@ -355,32 +350,32 @@ async def test_match_wraps_invalid_ai_match_output_without_leaking_validation_co
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("published_text", "recency_days", "should_queue", "expected_reason"),
+    ("published_text", "recency_days"),
     [
-        ("今日发布", 1, True, None),
-        ("刚刚发布", 1, True, None),
-        ("30分钟前发布", 1, True, None),
-        ("30分钟前", 1, True, None),
-        ("1小时前发布", 1, True, None),
-        ("1小时前", 1, True, None),
-        ("23小时前发布", 1, True, None),
-        ("24小时前发布", 1, True, None),
-        ("25小时前发布", 1, False, "发布时间不满足"),
-        ("47小时前发布", 1, False, "发布时间不满足"),
-        ("不是今日发布", 1, False, "发布时间无法解析"),
-        ("今日发布 30天前", 1, False, "发布时间无法解析"),
-        ("昨天发布", 1, True, None),
-        ("昨天发布 30天前", 1, False, "发布时间无法解析"),
-        ("9999分钟前发布", 1, False, "发布时间不满足"),
-        (f"{'9' * 5000}分钟前发布", 1, False, "发布时间无法解析"),
-        ("3天前", 3, True, None),
-        ("30天前", 7, False, "发布时间不满足"),
-        ("未知发布", 7, False, "发布时间无法解析"),
-        (None, 7, False, "发布时间无法解析"),
+        ("今日发布", 1),
+        ("刚刚发布", 1),
+        ("30分钟前发布", 1),
+        ("30分钟前", 1),
+        ("1小时前发布", 1),
+        ("1小时前", 1),
+        ("23小时前发布", 1),
+        ("24小时前发布", 1),
+        ("25小时前发布", 1),
+        ("47小时前发布", 1),
+        ("不是今日发布", 1),
+        ("今日发布 30天前", 1),
+        ("昨天发布", 1),
+        ("昨天发布 30天前", 1),
+        ("9999分钟前发布", 1),
+        (f"{'9' * 5000}分钟前发布", 1),
+        ("3天前", 3),
+        ("30天前", 7),
+        ("未知发布", 7),
+        (None, 7),
     ],
 )
-async def test_match_filters_by_published_recency(
-    published_text: str | None, recency_days: int, should_queue: bool, expected_reason: str | None
+async def test_match_queues_jobs_without_published_recency_hard_filter(
+    published_text: str | None, recency_days: int
 ) -> None:
     preference = make_preference()
     preference.recency_days = recency_days
@@ -401,13 +396,9 @@ async def test_match_filters_by_published_recency(
 
     result = await MatchingService(ai_client).match(job, make_resume(), preference)
 
-    assert result.should_queue is should_queue
-    if expected_reason is None:
-        assert result.hard_filter_reasons == []
-        assert ai_client.calls == 1
-    else:
-        assert expected_reason in result.hard_filter_reasons
-        assert ai_client.calls == 0
+    assert result.should_queue is True
+    assert result.hard_filter_reasons == []
+    assert ai_client.calls == 1
 
 
 @pytest.mark.asyncio
@@ -430,7 +421,7 @@ async def test_match_filters_by_published_recency(
         ({"bossActiveText": None}, "Boss 活跃度无法解析"),
     ],
 )
-async def test_match_applies_direct_hard_filters(job_updates: dict, expected_reason: str) -> None:
+async def test_match_queues_jobs_without_direct_hard_filters(job_updates: dict, expected_reason: str) -> None:
     job_data = {
         "source": "boss",
         "url": "https://www.zhipin.com/job_detail/6.html",
@@ -447,9 +438,10 @@ async def test_match_applies_direct_hard_filters(job_updates: dict, expected_rea
 
     result = await MatchingService(ai_client).match(JobPosting(**job_data), make_resume(), make_preference())
 
-    assert result.should_queue is False
-    assert expected_reason in result.hard_filter_reasons
-    assert ai_client.calls == 0
+    assert expected_reason
+    assert result.should_queue is True
+    assert result.hard_filter_reasons == []
+    assert ai_client.calls == 1
 
 
 @pytest.mark.asyncio
@@ -479,7 +471,7 @@ async def test_match_accepts_recent_boss_active_texts(boss_active_text: str) -> 
 
 
 @pytest.mark.asyncio
-async def test_match_hard_filters_unparseable_oversized_salary_number() -> None:
+async def test_match_queues_unparseable_oversized_salary_number() -> None:
     job = JobPosting(
         source="boss",
         url="https://www.zhipin.com/job_detail/oversized-salary.html",
@@ -495,6 +487,6 @@ async def test_match_hard_filters_unparseable_oversized_salary_number() -> None:
 
     result = await MatchingService(ai_client).match(job, make_resume(), make_preference())
 
-    assert result.should_queue is False
-    assert "薪资无法解析" in result.hard_filter_reasons
-    assert ai_client.calls == 0
+    assert result.should_queue is True
+    assert result.hard_filter_reasons == []
+    assert ai_client.calls == 1
