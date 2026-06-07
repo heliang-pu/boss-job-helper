@@ -231,6 +231,51 @@ describe("executeAutoApply", () => {
     expect(result.success).toBe(true);
   });
 
+  it("continues through the Boss default greeting confirmation dialog before sending the generated greeting", async () => {
+    document.body.innerHTML = `
+      <button class="brand-button">立即沟通</button>
+    `;
+    const startButton = document.querySelector(".brand-button") as HTMLButtonElement;
+    startButton.addEventListener("click", () => {
+      document.body.insertAdjacentHTML(
+        "beforeend",
+        `
+          <div class="dialog-container">
+            <h3>已向BOSS发送消息</h3>
+            <div class="default-greeting">您好，我对贵公司的职位很感兴趣，可以进一步沟通吗？</div>
+            <button class="stay-button">留在此页</button>
+            <button class="continue-button">继续沟通</button>
+          </div>
+        `,
+      );
+      const continueButton = document.querySelector(".continue-button") as HTMLButtonElement;
+      continueButton.addEventListener("click", () => {
+        document.querySelector(".dialog-container")?.remove();
+        document.body.insertAdjacentHTML(
+          "beforeend",
+          `<div class="chat-input"><textarea></textarea><button class="send-btn">发送</button></div>`,
+        );
+      });
+    });
+
+    const promise = executeAutoApply({
+      jobUrl: "https://www.zhipin.com/job_detail/default-greeting-confirm.html",
+      greeting: "您好，我有运营增长和内容项目经验，想结合这个岗位进一步沟通。",
+      companyName: "洛阳启鸣文化传媒",
+      title: "运营岗",
+      createdAt: Date.now(),
+    });
+
+    await vi.runAllTimersAsync();
+    const result = await promise;
+
+    expect(document.querySelector(".dialog-container")).toBeNull();
+    expect((document.querySelector("textarea") as HTMLTextAreaElement).value).toBe(
+      "您好，我有运营增长和内容项目经验，想结合这个岗位进一步沟通。",
+    );
+    expect(result.success).toBe(true);
+  });
+
   it("dispatches pointer and mouse events when pressing the send button", async () => {
     document.body.innerHTML = `
       <button class="brand-button">继续沟通</button>

@@ -97,6 +97,9 @@ describe("background main", () => {
         onInstalled: {
           addListener,
         },
+        onMessage: {
+          addListener: vi.fn(),
+        },
       },
       storage: {
         local: {

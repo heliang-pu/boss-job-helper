@@ -92,6 +92,8 @@ export async function executeAutoApply(task: ApplyTask): Promise<{ success: bool
   (chatButton as HTMLElement).click();
   await sleep(1500);
 
+  await continuePastDefaultGreetingDialog();
+
   // Step 3: Wait for textarea / input in chat dialog (max 8s)
   const chatInput = await waitForElement(
     () => findChatInput(),
@@ -240,6 +242,28 @@ function findSendButton(inputEl: HTMLElement): HTMLElement | null {
     if (scopedButton) return scopedButton;
   }
   return findClickableByText(["发送"]);
+}
+
+async function continuePastDefaultGreetingDialog(): Promise<void> {
+  const continueButton = await waitForElement(
+    () => {
+      const dialogs = Array.from(
+        document.querySelectorAll<HTMLElement>("[role='dialog'], .dialog-container, [class*='dialog'], [class*='modal']"),
+      );
+      const defaultGreetingDialog = dialogs.find((dialog) => {
+        const text = (dialog.textContent ?? "").replace(/\s+/g, "");
+        return text.includes("已向BOSS发送消息") || text.includes("修改打招呼内容");
+      });
+      if (!defaultGreetingDialog) return null;
+      return findClickableByTextIn(defaultGreetingDialog, ["继续沟通"]);
+    },
+    3000,
+  );
+
+  if (continueButton) {
+    pressSendButton(continueButton as HTMLElement);
+    await sleep(1200);
+  }
 }
 
 function findClickableByTextIn(root: ParentNode, texts: string[]): HTMLElement | null {

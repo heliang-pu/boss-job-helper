@@ -56,11 +56,13 @@ async function triggerAutoApply() {
   const taskWithFreshGreeting = await refreshGreetingFromDetailJob(task);
   showResultBar({ success: true, detail: "正在点击立即沟通并发送招呼语" }, 0);
   const result = await executeAutoApply(taskWithFreshGreeting);
-  const nextTask = await getNextPendingApplyTask(task.jobUrl);
-  await clearPendingApplyTask(task.jobUrl);
 
   // Show result bar
   showResultBar(result, 4000);
+  if (!result.success) return;
+
+  const nextTask = await getNextPendingApplyTask(task.jobUrl);
+  await clearPendingApplyTask(task.jobUrl);
   if (nextTask) {
     setTimeout(() => {
       window.location.href = nextTask.jobUrl;
