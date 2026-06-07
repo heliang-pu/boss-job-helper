@@ -34,6 +34,22 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           sendResponse(result);
           break;
         }
+        case "TRUSTED_CLICK": {
+          const tabId = _sender.tab?.id;
+          if (!tabId) {
+            sendResponse({ ok: false, error: "Missing sender tab id" });
+            break;
+          }
+          const x = Number(msg.payload?.x);
+          const y = Number(msg.payload?.y);
+          if (!Number.isFinite(x) || !Number.isFinite(y)) {
+            sendResponse({ ok: false, error: "Invalid click coordinates" });
+            break;
+          }
+          await dispatchTrustedClick(tabId, x, y);
+          sendResponse({ ok: true });
+          break;
+        }
         default:
           sendResponse({ error: `Unknown message type: ${msg.type}` });
       }
@@ -44,6 +60,34 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   return true; // async
 });
+
+async function dispatchTrustedClick(tabId: number, x: number, y: number): Promise<void> {
+  const target = { tabId };
+  await chrome.debugger.attach(target, "1.3");
+  try {
+    await chrome.debugger.sendCommand(target, "Input.dispatchMouseEvent", {
+      type: "mouseMoved",
+      x,
+      y,
+    });
+    await chrome.debugger.sendCommand(target, "Input.dispatchMouseEvent", {
+      type: "mousePressed",
+      x,
+      y,
+      button: "left",
+      clickCount: 1,
+    });
+    await chrome.debugger.sendCommand(target, "Input.dispatchMouseEvent", {
+      type: "mouseReleased",
+      x,
+      y,
+      button: "left",
+      clickCount: 1,
+    });
+  } finally {
+    await chrome.debugger.detach(target).catch(() => undefined);
+  }
+}
 
 /* ---------- install ---------- */
 

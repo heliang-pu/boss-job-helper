@@ -5,7 +5,7 @@ const manifest = {
   name: "Boss 求职助手",
   version: "0.1.0",
   description: "连接本地求职自动化服务，在 Boss 直聘页面辅助匹配和投递岗位。",
-  permissions: ["storage", "activeTab", "scripting"],
+  permissions: ["storage", "activeTab", "scripting", "debugger"],
   host_permissions: ["https://www.zhipin.com/*", "http://127.0.0.1:8765/*", "http://localhost:8765/*"],
   action: {
     default_popup: "popup.html",

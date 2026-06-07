@@ -243,7 +243,7 @@ async function continuePastDefaultGreetingDialog(): Promise<void> {
   const defaultGreetingDialog = findDefaultGreetingDialog();
   const continueButton = defaultGreetingDialog ? findClickableByTextIn(defaultGreetingDialog, ["继续沟通"]) : null;
   if (continueButton) {
-    pressSendButton(continueButton as HTMLElement);
+    await pressTrustedOrSyntheticClick(continueButton as HTMLElement);
     await sleep(1200);
   }
 }
@@ -354,6 +354,32 @@ function pressSendButton(sendBtn: HTMLElement): void {
     sendBtn.dispatchEvent(event);
   }
   sendBtn.click();
+}
+
+async function pressTrustedOrSyntheticClick(element: HTMLElement): Promise<void> {
+  if (await requestTrustedClick(element)) return;
+  pressSendButton(element);
+}
+
+async function requestTrustedClick(element: HTMLElement): Promise<boolean> {
+  const runtime = globalThis.chrome?.runtime;
+  if (!runtime?.sendMessage) return false;
+
+  const rect = element.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) return false;
+
+  try {
+    const response = await runtime.sendMessage({
+      type: "TRUSTED_CLICK",
+      payload: {
+        x: Math.round(rect.left + rect.width / 2),
+        y: Math.round(rect.top + rect.height / 2),
+      },
+    });
+    return Boolean((response as { ok?: boolean } | undefined)?.ok);
+  } catch {
+    return false;
+  }
 }
 
 function pressEnterToSend(inputEl: HTMLElement): void {
