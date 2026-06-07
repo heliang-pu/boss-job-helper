@@ -4,6 +4,20 @@
 
 > 仅供个人学习和自用自动化研究。请遵守招聘网站服务条款、平台风控规则和当地法律法规。
 
+## 截图
+
+### 配置与服务状态
+
+![扩展弹窗配置与本地服务状态](docs/images/popup-config.png)
+
+### 页面浮动面板
+
+![Boss 页面浮动面板就绪状态](docs/images/floating-panel-ready.png)
+
+### 扫描与投递队列
+
+![岗位扫描进度、匹配结果和投递队列](docs/images/scan-progress-and-queue.png)
+
 ## 功能
 
 - 扫描 Boss 直聘搜索结果页中的岗位卡片。
