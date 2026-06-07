@@ -388,6 +388,59 @@ describe("executeAutoApply", () => {
     expect(result.success).toBe(true);
   });
 
+  it("clicks the real Boss btn-sure span in the greeting popup", async () => {
+    document.body.innerHTML = `
+      <a class="btn btn-startchat">继续沟通</a>
+    `;
+    const startButton = document.querySelector(".btn-startchat") as HTMLElement;
+    startButton.addEventListener("click", () => {
+      document.body.insertAdjacentHTML(
+        "beforeend",
+        `
+          <div class="dialog-wrap greet-pop greet-boss-pop">
+            <div class="dialog-layer"></div>
+            <div class="dialog-container">
+              <div class="dialog-title"><h3 class="title">已向BOSS发送消息</h3></div>
+              <div class="dialog-con">
+                <div class="greet-con">您好，我对贵公司的职位很感兴趣，可以进一步沟通吗？</div>
+                <span>如需修改打招呼内容，请在【消息通知-设置打招呼语】页面修改</span>
+              </div>
+              <div class="dialog-footer">
+                <div class="btns">
+                  <span class="btn btn-outline">留在此页</span>
+                  <span class="btn btn-sure">继续沟通</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        `,
+      );
+      const sureButton = document.querySelector(".btn-sure") as HTMLElement;
+      sureButton.addEventListener("pointerup", () => {
+        document.querySelector(".greet-boss-pop")?.remove();
+        document.body.insertAdjacentHTML(
+          "beforeend",
+          `<div class="chat-input"><textarea></textarea><button class="send-btn">发送</button></div>`,
+        );
+      });
+    });
+
+    const promise = executeAutoApply({
+      jobUrl: "https://www.zhipin.com/job_detail/real-boss-greeting.html",
+      greeting: "您好，我想进一步沟通这个岗位。",
+      companyName: "洛阳稻田文化传媒",
+      title: "运营新人岗",
+      createdAt: Date.now(),
+    });
+
+    await vi.runAllTimersAsync();
+    const result = await promise;
+
+    expect(document.querySelector(".greet-boss-pop")).toBeNull();
+    expect((document.querySelector("textarea") as HTMLTextAreaElement).value).toBe("您好，我想进一步沟通这个岗位。");
+    expect(result.success).toBe(true);
+  });
+
   it("keeps looking for the Boss default greeting popup while waiting for the chat input", async () => {
     document.body.innerHTML = `
       <button class="job-primary-action">继续沟通</button>
@@ -441,7 +494,7 @@ describe("executeAutoApply", () => {
     `;
     const sendButton = document.querySelector(".send-btn") as HTMLButtonElement;
     const events: string[] = [];
-    for (const eventName of ["pointerdown", "mousedown", "mouseup", "click"]) {
+    for (const eventName of ["pointerdown", "pointerup", "mousedown", "mouseup", "click"]) {
       sendButton.addEventListener(eventName, () => events.push(eventName));
     }
 
@@ -456,7 +509,7 @@ describe("executeAutoApply", () => {
     await vi.runAllTimersAsync();
     const result = await promise;
 
-    expect(events).toEqual(["pointerdown", "mousedown", "mouseup", "click"]);
+    expect(events).toEqual(["pointerdown", "mousedown", "mouseup", "pointerup", "click"]);
     expect(result.success).toBe(true);
   });
 });

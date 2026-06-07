@@ -346,9 +346,9 @@ function setNativeInputValue(inputEl: HTMLInputElement | HTMLTextAreaElement, va
 
 function pressSendButton(sendBtn: HTMLElement): void {
   sendBtn.focus();
-  for (const eventName of ["pointerdown", "mousedown", "mouseup"]) {
+  for (const eventName of ["pointerdown", "mousedown", "mouseup", "pointerup"]) {
     const event =
-      eventName === "pointerdown"
+      eventName.startsWith("pointer")
         ? new Event(eventName, { bubbles: true, cancelable: true })
         : new MouseEvent(eventName, { bubbles: true, cancelable: true });
     sendBtn.dispatchEvent(event);
