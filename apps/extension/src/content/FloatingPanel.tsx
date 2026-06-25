@@ -2,13 +2,14 @@ import { useCallback, useState } from "react";
 import type { JobPosting, MatchResult, ResumeProfile, SearchPreference } from "@job-apply-assistant/shared-schema";
 import { BossAdapter } from "./bossAdapter";
 import { matchJob as matchViaSW } from "../shared/localApiClient";
+import { loadAiConfig } from "../shared/aiConfigStorage";
 import { setPendingApplyTask, setPendingApplyTasks, type ApplyTask } from "./autoApply";
 
 /* ---------- storage keys ---------- */
 
-const AI_CONFIG_KEY = "aiConfig";
 const RESUME_KEY = "resumeProfile";
 const PREF_KEY = "searchPreference";
+const MAX_BATCH_APPLY_TASKS = 150;
 
 /* ---------- defaults ---------- */
 
@@ -93,12 +94,14 @@ export function FloatingPanel() {
 
     try {
       // Load config from storage
-      const storage = await chrome.storage.local.get([AI_CONFIG_KEY, RESUME_KEY, PREF_KEY]);
-      const aiConfig = storage[AI_CONFIG_KEY] as Record<string, unknown> | undefined;
+      const [aiConfig, storage] = await Promise.all([
+        loadAiConfig(),
+        chrome.storage.local.get([RESUME_KEY, PREF_KEY]),
+      ]);
       const resume = storage[RESUME_KEY] as ResumeProfile | undefined;
       const preference: SearchPreference = (storage[PREF_KEY] as SearchPreference | undefined) ?? DEFAULT_PREFERENCE;
 
-      if (!aiConfig?.baseUrl || !aiConfig?.apiKey || !aiConfig?.model) {
+      if (!aiConfig.baseUrl || !aiConfig.apiKey || !aiConfig.model) {
         setError("请先在扩展弹窗中配置 AI（baseUrl / apiKey / model）");
         setStatus("error");
         return;
@@ -186,7 +189,15 @@ export function FloatingPanel() {
 
   // --- apply all queued ---
   const handleApplyAll = useCallback(async () => {
-    const queued = matches.filter((m) => m.result?.shouldQueue && m.result?.greeting && !appliedUrls.has(m.job.url));
+    const queued = matches
+      .map((match, index) => ({ match, index }))
+      .filter(({ match }) => match.result?.shouldQueue && match.result?.greeting && !appliedUrls.has(match.job.url))
+      .sort((left, right) => {
+        const scoreDelta = (right.match.result?.score ?? -1) - (left.match.result?.score ?? -1);
+        return scoreDelta || left.index - right.index;
+      })
+      .slice(0, MAX_BATCH_APPLY_TASKS)
+      .map(({ match }) => match);
     if (queued.length === 0) return;
     setApplyNotice(null);
 
@@ -222,6 +233,7 @@ export function FloatingPanel() {
   }, [matches, appliedUrls]);
 
   const queuedCount = matches.filter((m) => m.result?.shouldQueue).length;
+  const batchApplyLimitReached = appliedUrls.size >= Math.min(queuedCount, MAX_BATCH_APPLY_TASKS);
   const filteredCount = matches.filter((m) => m.result && !m.result.shouldQueue).length;
   const errorCount = matches.filter((m) => m.error).length;
   const isScanning = status === "scanning";
@@ -295,13 +307,13 @@ export function FloatingPanel() {
           <button
             type="button"
             onClick={handleApplyAll}
-            disabled={queuedCount === 0 || appliedUrls.size >= queuedCount}
+            disabled={queuedCount === 0 || batchApplyLimitReached}
             style={{
               minHeight: 34, flex: "0 0 auto", padding: "0 12px",
               border: "1px solid #059669", borderRadius: 6,
-              background: appliedUrls.size >= queuedCount ? "#e5e7eb" : "#059669",
-              color: appliedUrls.size >= queuedCount ? "#6b7280" : "#fff",
-              cursor: appliedUrls.size >= queuedCount ? "default" : "pointer",
+              background: batchApplyLimitReached ? "#e5e7eb" : "#059669",
+              color: batchApplyLimitReached ? "#6b7280" : "#fff",
+              cursor: batchApplyLimitReached ? "default" : "pointer",
               fontSize: 13, fontWeight: 600,
             }}
           >

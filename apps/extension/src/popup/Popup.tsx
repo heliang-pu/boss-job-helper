@@ -1,29 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import type { ResumeProfile, SearchPreference } from "@job-apply-assistant/shared-schema";
 import { checkHealth, uploadResume, BASE_URL, type HealthResponse } from "../shared/localApiClient";
+import { DEFAULT_AI_CONFIG, loadAiConfig, saveAiConfig } from "../shared/aiConfigStorage";
 
 /* ---------- storage helpers ---------- */
 
-const AI_CONFIG_KEY = "aiConfig";
 const RESUME_KEY = "resumeProfile";
-
-async function loadAiConfig() {
-  const items = await chrome.storage.local.get(AI_CONFIG_KEY);
-  const raw = items[AI_CONFIG_KEY];
-  if (raw && typeof raw === "object") {
-    return {
-      baseUrl: String((raw as Record<string, unknown>).baseUrl ?? ""),
-      apiKey: String((raw as Record<string, unknown>).apiKey ?? ""),
-      model: String((raw as Record<string, unknown>).model ?? ""),
-      timeoutSeconds: Number((raw as Record<string, unknown>).timeoutSeconds) || 30,
-    };
-  }
-  return { baseUrl: "", apiKey: "", model: "", timeoutSeconds: 30 };
-}
-
-async function saveAiConfig(config: { baseUrl: string; apiKey: string; model: string; timeoutSeconds: number }) {
-  await chrome.storage.local.set({ [AI_CONFIG_KEY]: config });
-}
 
 async function loadResume(): Promise<ResumeProfile | null> {
   const items = await chrome.storage.local.get(RESUME_KEY);
@@ -58,9 +40,9 @@ export function Popup({ localApi = defaultLocalApi }: PopupProps) {
   const [status, setStatus] = useState<ServiceStatus>("checking");
   const [error, setError] = useState<string | null>(null);
 
-  const [baseUrl, setBaseUrl] = useState("");
-  const [apiKey, setApiKey] = useState("");
-  const [model, setModel] = useState("");
+  const [baseUrl, setBaseUrl] = useState(DEFAULT_AI_CONFIG.baseUrl);
+  const [apiKey, setApiKey] = useState(DEFAULT_AI_CONFIG.apiKey);
+  const [model, setModel] = useState(DEFAULT_AI_CONFIG.model);
   const [savingConfig, setSavingConfig] = useState(false);
   const [configSaved, setConfigSaved] = useState(false);
 

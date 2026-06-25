@@ -11,14 +11,18 @@ export interface ExtensionStorageArea {
   get(
     keys: string | string[] | Record<string, unknown> | null,
     callback: (items: Record<string, unknown>) => void,
-  ): void;
-  set(items: Record<string, unknown>, callback?: () => void): void;
+  ): void | Promise<Record<string, unknown>>;
+  set(items: Record<string, unknown>, callback?: () => void): void | Promise<void>;
 }
 
+const envAiBaseUrl = import.meta.env.VITE_AI_BASE_URL?.trim();
+const envAiApiKey = import.meta.env.VITE_AI_API_KEY?.trim();
+const envAiModel = import.meta.env.VITE_AI_MODEL?.trim();
+
 export const DEFAULT_AI_CONFIG: AiConfig = {
-  baseUrl: "https://api.deepseek.com",
-  apiKey: "",
-  model: "deepseek-chat",
+  baseUrl: envAiBaseUrl || "https://api.deepseek.com",
+  apiKey: envAiApiKey || "",
+  model: envAiModel || "deepseek-chat",
   timeoutSeconds: 30,
 };
 
@@ -62,13 +66,39 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function getStorageItems(storageArea: ExtensionStorageArea, key: string): Promise<Record<string, unknown>> {
-  return new Promise((resolve) => {
-    storageArea.get(key, resolve);
+  return new Promise((resolve, reject) => {
+    let callbackResolved = false;
+    try {
+      const maybePromise = storageArea.get(key, (items) => {
+        callbackResolved = true;
+        resolve(items);
+      });
+      if (maybePromise && typeof maybePromise.then === "function") {
+        maybePromise.then((items) => {
+          if (!callbackResolved) resolve(items);
+        }, reject);
+      }
+    } catch (error) {
+      reject(error);
+    }
   });
 }
 
 function setStorageItems(storageArea: ExtensionStorageArea, items: Record<string, unknown>): Promise<void> {
-  return new Promise((resolve) => {
-    storageArea.set(items, resolve);
+  return new Promise((resolve, reject) => {
+    let callbackResolved = false;
+    try {
+      const maybePromise = storageArea.set(items, () => {
+        callbackResolved = true;
+        resolve();
+      });
+      if (maybePromise && typeof maybePromise.then === "function") {
+        maybePromise.then(() => {
+          if (!callbackResolved) resolve();
+        }, reject);
+      }
+    } catch (error) {
+      reject(error);
+    }
   });
 }

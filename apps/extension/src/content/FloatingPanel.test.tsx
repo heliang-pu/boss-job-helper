@@ -33,6 +33,20 @@ describe("FloatingPanel", () => {
   });
 
   it("shows a configuration error when AI config is missing", async () => {
+    vi.stubGlobal("chrome", {
+      storage: {
+        local: {
+          get: vi.fn((keys: string | string[]) => {
+            if (keys === "aiConfig") {
+              return Promise.resolve({
+                aiConfig: { baseUrl: "", apiKey: "", model: "", timeoutSeconds: 30 },
+              });
+            }
+            return Promise.resolve({});
+          }),
+        },
+      },
+    });
     render(<FloatingPanel />);
 
     fireEvent.click(screen.getByRole("button", { name: "开始扫描" }));
@@ -220,6 +234,88 @@ describe("FloatingPanel", () => {
         ],
       });
       expect(sessionSet.mock.invocationCallOrder[0]).toBeLessThan(open.mock.invocationCallOrder[0]);
+    });
+  });
+
+  it("limits batch apply to the 150 highest scoring queued jobs", async () => {
+    document.body.innerHTML = Array.from({ length: 151 }, (_, index) => {
+      const jobNumber = index + 1;
+      return `
+        <section class="job-card-box">
+          <a href="/job_detail/apply-${jobNumber}.html">
+            <span class="job-name">岗位 ${jobNumber}</span>
+            <span class="salary">25-35K</span>
+            <span class="job-area">上海</span>
+            <span class="company-name">公司 ${jobNumber}</span>
+          </a>
+        </section>
+      `;
+    }).join("");
+    const sessionSet = vi.fn().mockResolvedValue(undefined);
+    const sendMessage = vi.fn((message: { payload?: { job?: { url?: string } } }, callback: (response?: unknown) => void) => {
+      const score = Number(message.payload?.job?.url?.match(/apply-(\d+)\.html/)?.[1] ?? 0);
+      callback({
+        passedHardFilters: true,
+        hardFilterReasons: [],
+        score,
+        reasons: ["匹配"],
+        risks: [],
+        greeting: `您好，岗位 ${score} 期待沟通。`,
+        shouldQueue: true,
+      });
+    });
+    vi.stubGlobal("chrome", {
+      storage: {
+        local: {
+          get: vi.fn().mockResolvedValue({
+            aiConfig: { baseUrl: "https://api.deepseek.com", apiKey: "sk-test", model: "deepseek-chat" },
+            resumeProfile: {
+              id: "resume-1",
+              fileName: "resume.pdf",
+              rawText: "机器人项目",
+              summary: "机器人",
+              skills: ["机器人"],
+              yearsOfExperience: 1,
+              projectHighlights: [],
+              education: ["本科"],
+              targetRoleSuggestions: ["算法工程师"],
+            },
+          }),
+        },
+        session: {
+          set: sessionSet,
+        },
+      },
+      runtime: {
+        lastError: undefined,
+        sendMessage,
+      },
+    });
+    const open = vi.fn().mockReturnValue({});
+    vi.stubGlobal("open", open);
+
+    render(<FloatingPanel />);
+    fireEvent.click(screen.getByRole("button", { name: "开始扫描" }));
+    await screen.findByRole("button", { name: "一键投递（151）" });
+
+    fireEvent.click(screen.getByRole("button", { name: "一键投递（151）" }));
+
+    await waitFor(() => {
+      expect(open).toHaveBeenCalledWith("https://www.zhipin.com/job_detail/apply-151.html", "_blank");
+      expect(sessionSet).toHaveBeenCalledWith({
+        pendingApplyTask: expect.objectContaining({
+          jobUrl: "https://www.zhipin.com/job_detail/apply-151.html",
+        }),
+        pendingApplyTasks: expect.arrayContaining([
+          expect.objectContaining({ jobUrl: "https://www.zhipin.com/job_detail/apply-151.html" }),
+          expect.objectContaining({ jobUrl: "https://www.zhipin.com/job_detail/apply-2.html" }),
+        ]),
+      });
+      const storedTasks = sessionSet.mock.calls[0][0].pendingApplyTasks;
+      expect(storedTasks).toHaveLength(150);
+      expect(storedTasks[0].jobUrl).toBe("https://www.zhipin.com/job_detail/apply-151.html");
+      expect(storedTasks.at(-1).jobUrl).toBe("https://www.zhipin.com/job_detail/apply-2.html");
+      expect(storedTasks.some((task: { jobUrl: string }) => task.jobUrl.endsWith("/apply-1.html"))).toBe(false);
     });
   });
 });
