@@ -4,10 +4,10 @@ import { FloatingPanel } from "./FloatingPanel";
 import { getNextPendingApplyTask, getPendingApplyTaskForUrl, executeAutoApply, clearPendingApplyTask } from "./autoApply";
 import { BossAdapter } from "./bossAdapter";
 import { matchJob } from "../shared/localApiClient";
+import { loadAiConfig } from "../shared/aiConfigStorage";
 
 export const FLOATING_PANEL_CONTAINER_ID = "job-apply-assistant-floating-panel";
 
-const AI_CONFIG_KEY = "aiConfig";
 const RESUME_KEY = "resumeProfile";
 const PREF_KEY = "searchPreference";
 
@@ -73,11 +73,13 @@ async function triggerAutoApply() {
 async function refreshGreetingFromDetailJob(task: Awaited<ReturnType<typeof getPendingApplyTaskForUrl>>) {
   if (!task?.job) return task!;
   try {
-    const storage = await chrome.storage.local.get([AI_CONFIG_KEY, RESUME_KEY, PREF_KEY]);
-    const aiConfig = storage[AI_CONFIG_KEY] as Record<string, unknown> | undefined;
+    const [aiConfig, storage] = await Promise.all([
+      loadAiConfig(),
+      chrome.storage.local.get([RESUME_KEY, PREF_KEY]),
+    ]);
     const resume = storage[RESUME_KEY] as ResumeProfile | undefined;
     const preference = storage[PREF_KEY] as SearchPreference | undefined;
-    if (!aiConfig?.baseUrl || !aiConfig?.apiKey || !aiConfig?.model || !resume?.id || !preference) return task;
+    if (!aiConfig.baseUrl || !aiConfig.apiKey || !aiConfig.model || !resume?.id || !preference) return task;
 
     const detailJob = new BossAdapter(document).extractDetailJob(task.job);
     if (!detailJob) return task;
@@ -93,10 +95,14 @@ async function refreshGreetingFromDetailJob(task: Awaited<ReturnType<typeof getP
         timeoutSeconds: Number(aiConfig.timeoutSeconds) || 30,
       },
     });
+    // Only adopt the freshly generated greeting if the detail-page re-match still passes the
+    // hard filters (e.g. city). Otherwise keep the greeting that already passed on the list page,
+    // so we never send the "未通过硬性筛选" placeholder.
+    const freshGreeting = result.shouldQueue && result.greeting ? result.greeting : task.greeting;
     return {
       ...task,
       job: detailJob,
-      greeting: result.greeting || task.greeting,
+      greeting: freshGreeting,
       companyName: detailJob.companyName,
       title: detailJob.title,
     };

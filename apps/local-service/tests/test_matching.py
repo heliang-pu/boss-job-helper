@@ -7,6 +7,7 @@ from job_apply_assistant.models import ApplyTask, JobPosting, ResumeProfile, Sea
 class FakeAIClient:
     def __init__(self, response: dict | None = None) -> None:
         self.calls = 0
+        self.last_system_prompt: str | None = None
         self.last_payload: dict | None = None
         self.response = (
             response
@@ -21,6 +22,7 @@ class FakeAIClient:
 
     async def complete_json(self, system_prompt: str, payload: dict) -> dict:
         self.calls += 1
+        self.last_system_prompt = system_prompt
         self.last_payload = payload
         return self.response
 
@@ -88,6 +90,149 @@ async def test_match_passes_when_hard_filters_and_ai_score_pass() -> None:
 
 
 @pytest.mark.asyncio
+async def test_match_adds_portfolio_url_to_greeting() -> None:
+    job = JobPosting(
+        source="boss",
+        url="https://www.zhipin.com/job_detail/portfolio.html",
+        title="机器人软件工程师",
+        companyName="示例科技",
+        city="上海",
+        salaryText="25-40K",
+        description="ROS Python 机器人控制",
+        bossActiveText="刚刚活跃",
+        publishedText="今日发布",
+    )
+
+    result = await MatchingService(FakeAIClient()).match(job, make_resume(), make_preference())
+
+    assert "https://heliang-pu.github.io/" in result.greeting
+
+
+@pytest.mark.asyncio
+async def test_match_adds_portfolio_project_context_to_greeting() -> None:
+    job = JobPosting(
+        source="boss",
+        url="https://www.zhipin.com/job_detail/portfolio-summary.html",
+        title="多模态大模型算法工程师",
+        companyName="示例科技",
+        city="上海",
+        salaryText="30-60K",
+        description="负责 VLA/VLM 策略、机器人任务分解与真实平台部署",
+        bossActiveText="刚刚活跃",
+        publishedText="今日发布",
+    )
+
+    result = await MatchingService(FakeAIClient()).match(job, make_resume(), make_preference())
+
+    assert "https://heliang-pu.github.io/" in result.greeting
+    assert any(term in result.greeting for term in ["LeRobot", "傅利叶 GR2", "RoboBrain VLM"])
+
+
+@pytest.mark.asyncio
+async def test_match_replaces_generic_portfolio_reference_with_project_context() -> None:
+    job = JobPosting(
+        source="boss",
+        url="https://www.zhipin.com/job_detail/generic-portfolio.html",
+        title="VLA 资深工程师",
+        companyName="示例科技",
+        city="上海",
+        salaryText="40-70K",
+        description="需要熟悉 VLA、机器人真机部署、VLM 任务分解",
+        bossActiveText="刚刚活跃",
+        publishedText="今日发布",
+    )
+    ai_client = FakeAIClient(
+        {
+            "score": 85,
+            "reasons": ["VLA 方向匹配"],
+            "risks": [],
+            "greeting": "您好，我对贵司岗位很感兴趣，相关项目已在我的个人主页 https://heliang-pu.github.io/ 展示。",
+        }
+    )
+
+    result = await MatchingService(ai_client).match(job, make_resume(), make_preference())
+
+    assert "傅利叶 GR2" in result.greeting
+    assert "RoboBrain VLM" in result.greeting
+    assert "项目细节见" in result.greeting
+    assert "主页展示" not in result.greeting
+
+
+@pytest.mark.asyncio
+async def test_match_makes_generic_greetings_specific_to_each_jd() -> None:
+    ai_client = FakeAIClient(
+        {
+            "score": 86,
+            "reasons": ["方向匹配"],
+            "risks": [],
+            "greeting": "您好，我是蒲贺良，具身智能全栈工程师，希望能进一步沟通这个岗位。",
+        }
+    )
+    vlm_job = JobPosting(
+        source="boss",
+        url="https://www.zhipin.com/job_detail/vlm-task.html",
+        title="VLA 资深工程师（视觉-语言-动作工程师）",
+        companyName="示例科技",
+        city="上海",
+        salaryText="40-70K",
+        description="负责 VLM 任务分解、RoboBrain 接入、多技能调度和人形机器人真实部署",
+        bossActiveText="刚刚活跃",
+        publishedText="今日发布",
+    )
+    dexterous_job = JobPosting(
+        source="boss",
+        url="https://www.zhipin.com/job_detail/dexterous.html",
+        title="具身智能算法专家",
+        companyName="示例科技",
+        city="上海",
+        salaryText="45-75K",
+        description="负责双臂灵巧手、触觉反馈、ACT 与 Diffusion Policy 在真实平台上的策略训练与部署",
+        bossActiveText="刚刚活跃",
+        publishedText="今日发布",
+    )
+
+    service = MatchingService(ai_client)
+    vlm_result = await service.match(vlm_job, make_resume(), make_preference())
+    dexterous_result = await service.match(dexterous_job, make_resume(), make_preference())
+
+    assert vlm_result.greeting != dexterous_result.greeting
+    assert "RoboBrain VLM" in vlm_result.greeting
+    assert "傅利叶 GR2" in vlm_result.greeting
+    assert "双臂灵巧手" in dexterous_result.greeting
+    assert "ACT/Diffusion Policy/π0.5" in dexterous_result.greeting
+
+
+@pytest.mark.asyncio
+async def test_match_sends_portfolio_context_to_ai_for_greeting() -> None:
+    job = JobPosting(
+        source="boss",
+        url="https://www.zhipin.com/job_detail/portfolio-context.html",
+        title="多模态 VLA 算法工程师",
+        companyName="示例科技",
+        city="上海",
+        salaryText="30-60K",
+        description="负责 VLA/VLM 策略、机器人真机推理部署、任务分解与技能调度",
+        bossActiveText="刚刚活跃",
+        publishedText="今日发布",
+    )
+    ai_client = FakeAIClient()
+
+    await MatchingService(ai_client).match(job, make_resume(), make_preference())
+
+    assert ai_client.last_system_prompt is not None
+    assert "个人主页" in ai_client.last_system_prompt
+    assert "不要只写" in ai_client.last_system_prompt
+    assert "不同 JD" in ai_client.last_system_prompt
+    assert "禁止复用同一套招呼语" in ai_client.last_system_prompt
+    assert ai_client.last_payload is not None
+    portfolio = ai_client.last_payload["portfolio"]
+    assert portfolio["url"] == "https://heliang-pu.github.io/"
+    assert "LeRobot" in portfolio["keywords"]
+    assert "RoboBrain VLM" in portfolio["keywords"]
+    assert any("傅利叶 GR2" in project for project in portfolio["projects"])
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("city", "target_city"),
     [
@@ -118,6 +263,30 @@ async def test_match_accepts_district_level_city_matches(city: str, target_city:
     assert result.should_queue is True
     assert result.hard_filter_reasons == []
     assert ai_client.calls == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("city", ["北京", "苏州", "杭州·余杭区", "深圳市南山区"])
+async def test_match_filters_jobs_outside_target_cities_before_ai_call(city: str) -> None:
+    job = JobPosting(
+        source="boss",
+        url="https://www.zhipin.com/job_detail/off-city.html",
+        title="机器人软件工程师",
+        companyName="示例科技",
+        city=city,
+        salaryText="25-40K",
+        description="ROS Python 机器人控制",
+        bossActiveText="刚刚活跃",
+        publishedText="今日发布",
+    )
+    ai_client = FakeAIClient()
+
+    result = await MatchingService(ai_client).match(job, make_resume(), make_preference())
+
+    assert result.should_queue is False
+    assert result.passed_hard_filters is False
+    assert "城市不匹配" in result.hard_filter_reasons
+    assert ai_client.calls == 0
 
 
 @pytest.mark.asyncio
@@ -405,7 +574,6 @@ async def test_match_queues_jobs_without_published_recency_hard_filter(
 @pytest.mark.parametrize(
     ("job_updates", "expected_reason"),
     [
-        ({"city": "北京"}, "城市不匹配"),
         ({"title": "后端工程师", "description": "Java 服务端开发"}, "岗位关键词不匹配"),
         ({"bossActiveText": "很久没活跃"}, "Boss 活跃度不满足"),
         ({"bossActiveText": "不在线"}, "Boss 活跃度不满足"),

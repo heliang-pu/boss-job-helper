@@ -10,6 +10,93 @@ from job_apply_assistant.models import JobPosting, MatchResult, ResumeProfile, S
 
 
 MAX_MONTHLY_SALARY_K = 500
+PORTFOLIO_URL = "https://heliang-pu.github.io/"
+PORTFOLIO_CONTEXT = {
+    "url": PORTFOLIO_URL,
+    "role": "具身智能 / VLA 工程师",
+    "summary": "关注机器人从数据采集、策略训练到真机部署的完整闭环，专注 LeRobot、VLA/VLM Policy、ACT、Diffusion Policy、π0/π0.5、GR00T、机器人真机部署。",
+    "keywords": [
+        "LeRobot",
+        "ACT",
+        "Diffusion Policy",
+        "π0",
+        "π0.5",
+        "GR00T",
+        "VLM / VLA",
+        "RoboBrain VLM",
+        "异步推理",
+        "机器人真机部署",
+        "灵巧手",
+        "人形机器人",
+    ],
+    "projects": [
+        "机械臂 + 智元灵巧手双臂协作：基于 LeRobot 完成 teleoperation、data collection、inference、replay、ACT/Diffusion Policy/π0.5 真机部署，并融合 tactile encoder。",
+        "傅利叶 GR2 人形机器人分拣：基于 π0、GR00T、RoboOS 与 RoboBrain VLM 打通感知、控制、推理、技能调度和分拣流程。",
+        "S101 单臂抓取策略验证：采集 500+ 条 demonstration，基于 ACT、Diffusion Policy、π0 完成训练、推理部署和闭环测试。",
+    ],
+}
+PORTFOLIO_PROJECT_SUMMARY = (
+    "我有 LeRobot 双臂灵巧手、ACT/Diffusion Policy/π0.5 真机部署、"
+    "傅利叶 GR2 + RoboBrain VLM 分拣和 S101 500+ demonstrations 项目经验"
+)
+PORTFOLIO_EVIDENCE = [
+    {
+        "patterns": [
+            "灵巧",
+            "触觉",
+            "双臂",
+            "ACT",
+            "Diffusion",
+            "π0.5",
+            "dexterous",
+            "tactile",
+        ],
+        "terms": ["双臂灵巧手", "ACT/Diffusion Policy/π0.5"],
+        "summary": "我做过 LeRobot 双臂灵巧手项目，覆盖 ACT/Diffusion Policy/π0.5 策略训练、触觉反馈和真机部署",
+    },
+    {
+        "patterns": [
+            "VLM",
+            "视觉-语言",
+            "视觉语言",
+            "任务分解",
+            "技能调度",
+            "RoboBrain",
+            "RoboOS",
+            "人形",
+            "humanoid",
+        ],
+        "terms": ["傅利叶 GR2", "RoboBrain VLM"],
+        "summary": "我做过傅利叶 GR2 + RoboBrain VLM 分拣项目，打通 VLM 任务分解、多技能调度和人形机器人真实部署",
+    },
+    {
+        "patterns": [
+            "S101",
+            "demonstration",
+            "数据采集",
+            "抓取",
+            "单臂",
+            "夹取",
+            "入盒",
+        ],
+        "terms": ["S101", "500+ demonstrations"],
+        "summary": "我做过 S101 单臂抓取策略验证，采集 500+ demonstrations，并完成 ACT/Diffusion Policy/π0 训练和闭环测试",
+    },
+]
+PORTFOLIO_TERMS = [
+    "LeRobot",
+    "ACT",
+    "Diffusion Policy",
+    "π0",
+    "π0.5",
+    "GR00T",
+    "GR2",
+    "RoboBrain",
+    "灵巧手",
+    "双臂",
+    "500+",
+    "真机",
+]
 
 
 class MatchingResponseError(RuntimeError):
@@ -77,11 +164,15 @@ class MatchingService:
             (
                 "你是求职投递助手。根据 payload 里的 resume 和 job.description/JD 深度生成结果。"
                 "greeting 必须是给招聘者的第一句招呼语，结合候选人简历亮点和当前岗位 JD 的具体要求，"
-                "不要写泛泛模板，不要编造简历没有的信息。只返回 JSON：score 0-100、reasons 字符串数组、"
-                "risks 字符串数组、greeting 字符串。"
+                "同时结合 payload.portfolio 里个人主页的真实项目，选择和岗位最相关的 1-2 个项目或技术点，"
+                f"并自然包含个人主页链接 {PORTFOLIO_URL}。不要写泛泛模板，不要编造简历和个人主页没有的信息。"
+                "不要只写“个人主页展示了项目”，必须直接写出和岗位对应的主页项目名、技术点或真机平台。"
+                "不同 JD 必须生成不同切入点，禁止复用同一套招呼语。"
+                "只返回 JSON：score 0-100、reasons 字符串数组、risks 字符串数组、greeting 字符串。"
             ),
             {
                 "resume": resume.to_wire(),
+                "portfolio": PORTFOLIO_CONTEXT,
                 "preference": preference.to_wire(),
                 "job": job.to_wire(),
             },
@@ -101,12 +192,58 @@ class MatchingService:
             score=validated_ai_result.score,
             reasons=validated_ai_result.reasons,
             risks=validated_ai_result.risks,
-            greeting=validated_ai_result.greeting,
+            greeting=self._add_portfolio_context(validated_ai_result.greeting, job),
             shouldQueue=True,
         )
 
+    def _add_portfolio_context(self, greeting: str, job: JobPosting) -> str:
+        selected_evidence = self._select_portfolio_evidence(job)
+        selected_terms = selected_evidence["terms"]
+        selected_summary = selected_evidence["summary"]
+        has_selected_evidence = any(term in greeting for term in selected_terms)
+        has_portfolio_term = any(term in greeting for term in PORTFOLIO_TERMS)
+        has_portfolio_url = PORTFOLIO_URL in greeting
+        if has_selected_evidence and has_portfolio_url:
+            return greeting
+        if has_selected_evidence:
+            return f"{greeting.rstrip()} 项目细节见：{PORTFOLIO_URL}"
+        cleaned_greeting = self._remove_generic_portfolio_reference(greeting)
+        if has_portfolio_term and has_portfolio_url:
+            return f"{cleaned_greeting.rstrip()} 另外，{selected_summary}，项目细节见：{PORTFOLIO_URL}"
+        if has_portfolio_term:
+            return f"{cleaned_greeting.rstrip()} 另外，{selected_summary}，项目细节见：{PORTFOLIO_URL}"
+        if has_portfolio_url:
+            return f"{cleaned_greeting.rstrip()} {selected_summary}，项目细节见：{PORTFOLIO_URL}"
+        return f"{cleaned_greeting.rstrip()} {selected_summary}，项目细节见：{PORTFOLIO_URL}"
+
+    def _select_portfolio_evidence(self, job: JobPosting) -> dict[str, object]:
+        job_text = f"{job.title} {job.description}".lower()
+        for evidence in PORTFOLIO_EVIDENCE:
+            if any(pattern.lower() in job_text for pattern in evidence["patterns"]):
+                return evidence
+        return {
+            "terms": ["LeRobot", "RoboBrain VLM"],
+            "summary": PORTFOLIO_PROJECT_SUMMARY,
+        }
+
+    def _remove_generic_portfolio_reference(self, greeting: str) -> str:
+        cleaned_greeting = re.sub(
+            rf"[，,。.\s]*相关项目(?:已)?在我的个人主页\s*{re.escape(PORTFOLIO_URL)}\s*展示[。.]?",
+            "",
+            greeting,
+        )
+        cleaned_greeting = re.sub(
+            rf"[，,。.\s]*我的个人主页\s*[（(]?{re.escape(PORTFOLIO_URL)}[）)]?\s*展示了?更多[^。.]*(?:[。.]|$)",
+            "",
+            cleaned_greeting,
+        )
+        return cleaned_greeting.strip(" ，,。.")
+
     def _hard_filter(self, job: JobPosting, preference: SearchPreference) -> list[str]:
         reasons: list[str] = []
+        target_cities = [city.strip() for city in preference.target_cities if city.strip()]
+        if target_cities and not self._city_matches(job.city, target_cities):
+            reasons.append("城市不匹配")
         blocked_companies = [blocked.strip() for blocked in preference.blocked_companies if blocked.strip()]
         if any(blocked in job.company_name for blocked in blocked_companies):
             reasons.append("公司在黑名单中")
