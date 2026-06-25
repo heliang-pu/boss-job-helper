@@ -231,7 +231,7 @@ describe("executeAutoApply", () => {
     expect(result.success).toBe(true);
   });
 
-  it("continues through the Boss default greeting confirmation dialog before sending the generated greeting", async () => {
+  it("treats the Boss「已向BOSS发送消息」confirmation popup as applied and dismisses it via 留在此页", async () => {
     document.body.innerHTML = `
       <button class="brand-button">立即沟通</button>
     `;
@@ -248,13 +248,11 @@ describe("executeAutoApply", () => {
           </div>
         `,
       );
-      const continueButton = document.querySelector(".continue-button") as HTMLButtonElement;
-      continueButton.addEventListener("click", () => {
+      // Only 留在此页 closes the popup; if 继续沟通 were clicked the popup would stay open
+      // (and Boss would navigate to the chat page, aborting the batch run).
+      const stayButton = document.querySelector(".stay-button") as HTMLButtonElement;
+      stayButton.addEventListener("click", () => {
         document.querySelector(".dialog-container")?.remove();
-        document.body.insertAdjacentHTML(
-          "beforeend",
-          `<div class="chat-input"><textarea></textarea><button class="send-btn">发送</button></div>`,
-        );
       });
     });
 
@@ -270,13 +268,52 @@ describe("executeAutoApply", () => {
     const result = await promise;
 
     expect(document.querySelector(".dialog-container")).toBeNull();
-    expect((document.querySelector("textarea") as HTMLTextAreaElement).value).toBe(
-      "您好，我有运营增长和内容项目经验，想结合这个岗位进一步沟通。",
-    );
+    expect(result.success).toBe(true);
+    expect(result.detail).toContain("发送招呼语");
+  });
+
+  it("never clicks 继续沟通 on the confirmation popup so the batch run stays on the job page", async () => {
+    let continueClicked = false;
+    document.body.innerHTML = `
+      <button class="brand-button">立即沟通</button>
+    `;
+    const startButton = document.querySelector(".brand-button") as HTMLButtonElement;
+    startButton.addEventListener("click", () => {
+      document.body.insertAdjacentHTML(
+        "beforeend",
+        `
+          <div class="dialog-container">
+            <h3>已向BOSS发送消息</h3>
+            <button class="stay-button">留在此页</button>
+            <button class="continue-button">继续沟通</button>
+          </div>
+        `,
+      );
+      document.querySelector(".stay-button")?.addEventListener("click", () => {
+        document.querySelector(".dialog-container")?.remove();
+      });
+      document.querySelector(".continue-button")?.addEventListener("click", () => {
+        continueClicked = true;
+      });
+    });
+
+    const promise = executeAutoApply({
+      jobUrl: "https://www.zhipin.com/job_detail/no-navigation.html",
+      greeting: "您好，我想进一步沟通这个岗位。",
+      companyName: "北京擎仓机器人科技",
+      title: "VLA算法工程师",
+      createdAt: Date.now(),
+    });
+
+    await vi.runAllTimersAsync();
+    const result = await promise;
+
+    expect(continueClicked).toBe(false);
+    expect(document.querySelector(".dialog-container")).toBeNull();
     expect(result.success).toBe(true);
   });
 
-  it("continues through the default greeting popup even when Boss uses non-dialog class names", async () => {
+  it("dismisses the default greeting popup even when Boss uses non-dialog class names", async () => {
     document.body.innerHTML = `
       <button class="job-primary-action">继续沟通</button>
     `;
@@ -293,13 +330,9 @@ describe("executeAutoApply", () => {
           </div>
         `,
       );
-      const continueButton = document.querySelector(".continue-button") as HTMLButtonElement;
-      continueButton.addEventListener("click", () => {
+      const stayButton = document.querySelector(".stay-button") as HTMLButtonElement;
+      stayButton.addEventListener("click", () => {
         document.querySelector(".boss-confirm-layer")?.remove();
-        document.body.insertAdjacentHTML(
-          "beforeend",
-          `<div class="chat-input"><textarea></textarea><button class="send-btn">发送</button></div>`,
-        );
       });
     });
 
@@ -315,13 +348,10 @@ describe("executeAutoApply", () => {
     const result = await promise;
 
     expect(document.querySelector(".boss-confirm-layer")).toBeNull();
-    expect((document.querySelector("textarea") as HTMLTextAreaElement).value).toBe(
-      "您好，我结合过往运营项目经验，想进一步沟通这个岗位。",
-    );
     expect(result.success).toBe(true);
   });
 
-  it("clicks the top-layer continue button when the popup button is not a native button", async () => {
+  it("dismisses the popup when the 留在此页 button is a span rather than a native button", async () => {
     document.body.innerHTML = `
       <button class="job-primary-action">继续沟通</button>
     `;
@@ -341,33 +371,11 @@ describe("executeAutoApply", () => {
           </section>
         `,
       );
-      const continueButton = document.querySelector(".continue-action") as HTMLElement;
-      continueButton.addEventListener("click", () => {
+      const stayButton = document.querySelector(".stay-action") as HTMLElement;
+      stayButton.addEventListener("click", () => {
         document.querySelector(".boss-mask")?.remove();
         document.querySelector(".boss-confirm-layer")?.remove();
-        document.body.insertAdjacentHTML(
-          "beforeend",
-          `<div class="chat-input"><textarea></textarea><button class="send-btn">发送</button></div>`,
-        );
       });
-    });
-
-    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function getRect(this: HTMLElement) {
-      const element = this;
-      if (element.classList.contains("continue-action")) {
-        return DOMRect.fromRect({ x: 560, y: 360, width: 90, height: 44 });
-      }
-      if (element.classList.contains("job-primary-action")) {
-        return DOMRect.fromRect({ x: 160, y: 140, width: 120, height: 44 });
-      }
-      return DOMRect.fromRect({ x: 0, y: 0, width: 1, height: 1 });
-    });
-    Object.defineProperty(document, "elementFromPoint", {
-      configurable: true,
-      value: vi.fn((x: number, y: number) => {
-        if (x === 605 && y === 382) return document.querySelector(".continue-action");
-        return document.querySelector(".boss-mask");
-      }),
     });
 
     const promise = executeAutoApply({
@@ -382,13 +390,10 @@ describe("executeAutoApply", () => {
     const result = await promise;
 
     expect(document.querySelector(".boss-confirm-layer")).toBeNull();
-    expect((document.querySelector("textarea") as HTMLTextAreaElement).value).toBe(
-      "您好，我对抖音运营岗位很感兴趣，想进一步沟通。",
-    );
     expect(result.success).toBe(true);
   });
 
-  it("clicks the real Boss btn-sure span in the greeting popup", async () => {
+  it("clicks the real Boss btn-outline (留在此页) span in the greeting popup", async () => {
     document.body.innerHTML = `
       <a class="btn btn-startchat">继续沟通</a>
     `;
@@ -415,13 +420,9 @@ describe("executeAutoApply", () => {
           </div>
         `,
       );
-      const sureButton = document.querySelector(".btn-sure") as HTMLElement;
-      sureButton.addEventListener("pointerup", () => {
+      const stayButton = document.querySelector(".btn-outline") as HTMLElement;
+      stayButton.addEventListener("click", () => {
         document.querySelector(".greet-boss-pop")?.remove();
-        document.body.insertAdjacentHTML(
-          "beforeend",
-          `<div class="chat-input"><textarea></textarea><button class="send-btn">发送</button></div>`,
-        );
       });
     });
 
@@ -437,11 +438,53 @@ describe("executeAutoApply", () => {
     const result = await promise;
 
     expect(document.querySelector(".greet-boss-pop")).toBeNull();
-    expect((document.querySelector("textarea") as HTMLTextAreaElement).value).toBe("您好，我想进一步沟通这个岗位。");
     expect(result.success).toBe(true);
   });
 
-  it("keeps looking for the Boss default greeting popup while waiting for the chat input", async () => {
+  it("climbs from the Boss dialog title to the popup container before clicking 留在此页", async () => {
+    document.body.innerHTML = `
+      <a class="btn btn-startchat">继续沟通</a>
+    `;
+    const startButton = document.querySelector(".btn-startchat") as HTMLElement;
+    startButton.addEventListener("click", () => {
+      document.body.insertAdjacentHTML(
+        "beforeend",
+        `
+          <section class="greet-boss-pop">
+            <div class="dialog-title"><h3 class="title">已向BOSS发送消息</h3></div>
+            <div class="dialog-con">
+              <div class="greet-con">您好，不知道这个岗位是否还在招人，我仔细查看了您...</div>
+              <span>如需修改打招呼内容，请在【消息通知-设置打招呼语】页面修改</span>
+            </div>
+            <div class="actions">
+              <button class="btn-outline">留在此页</button>
+              <button class="btn-sure">继续沟通</button>
+            </div>
+          </section>
+        `,
+      );
+      const stayButton = document.querySelector(".btn-outline") as HTMLElement;
+      stayButton.addEventListener("click", () => {
+        document.querySelector(".greet-boss-pop")?.remove();
+      });
+    });
+
+    const promise = executeAutoApply({
+      jobUrl: "https://www.zhipin.com/job_detail/title-only-dialog.html",
+      greeting: "您好，我结合 VLA 项目经验，想进一步沟通这个岗位。",
+      companyName: "华晟经世",
+      title: "具身智能机器人工程师",
+      createdAt: Date.now(),
+    });
+
+    await vi.runAllTimersAsync();
+    const result = await promise;
+
+    expect(document.querySelector(".greet-boss-pop")).toBeNull();
+    expect(result.success).toBe(true);
+  });
+
+  it("keeps polling until the Boss default greeting popup appears, then dismisses it", async () => {
     document.body.innerHTML = `
       <button class="job-primary-action">继续沟通</button>
     `;
@@ -454,17 +497,14 @@ describe("executeAutoApply", () => {
             <section class="boss-confirm-layer">
               <h2>已向BOSS发送消息</h2>
               <p>如需修改打招呼内容，请在【消息通知-设置打招呼语】页面修改</p>
+              <span class="stay-action">留在此页</span>
               <span class="continue-action">继续沟通</span>
             </section>
           `,
         );
-        const continueButton = document.querySelector(".continue-action") as HTMLElement;
-        continueButton.addEventListener("click", () => {
+        const stayButton = document.querySelector(".stay-action") as HTMLElement;
+        stayButton.addEventListener("click", () => {
           document.querySelector(".boss-confirm-layer")?.remove();
-          document.body.insertAdjacentHTML(
-            "beforeend",
-            `<div class="chat-input"><textarea></textarea><button class="send-btn">发送</button></div>`,
-          );
         });
       }, 6000);
     });
@@ -481,7 +521,6 @@ describe("executeAutoApply", () => {
     const result = await promise;
 
     expect(document.querySelector(".boss-confirm-layer")).toBeNull();
-    expect((document.querySelector("textarea") as HTMLTextAreaElement).value).toBe("您好，我想进一步沟通这个岗位。");
     expect(result.success).toBe(true);
   });
 

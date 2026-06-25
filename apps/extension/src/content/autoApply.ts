@@ -92,14 +92,19 @@ export async function executeAutoApply(task: ApplyTask): Promise<{ success: bool
   (chatButton as HTMLElement).click();
   await sleep(1500);
 
-  // Step 3: Wait for textarea / input in chat dialog (max 8s)
-  const chatInput = await waitForChatInputAfterStartingConversation(10000);
-  if (!chatInput) {
+  // Step 3: Wait for either the chat input or Boss's「已向BOSS发送消息」confirmation popup.
+  // When a default greeting is configured, clicking 立即沟通 sends it right away and Boss shows
+  // the confirmation popup instead of an inline chat box — that already counts as applied.
+  const outcome = await waitForChatInputOrConfirmation(10000);
+  if (!outcome) {
     return { success: false, detail: "点击后未出现对话框，请手动处理" };
+  }
+  if (outcome.kind === "alreadySent") {
+    return { success: true, detail: `已向 ${task.companyName} - ${task.title} 发送招呼语` };
   }
 
   // Step 4: Type greeting
-  const inputEl = chatInput as HTMLElement;
+  const inputEl = outcome.input;
   fillChatInput(inputEl, task.greeting);
   await sleep(500);
 
@@ -239,25 +244,35 @@ function findSendButton(inputEl: HTMLElement): HTMLElement | null {
   return findClickableByText(["发送"]);
 }
 
-async function continuePastDefaultGreetingDialog(): Promise<void> {
-  const defaultGreetingDialog = findDefaultGreetingDialog();
-  const continueButton = defaultGreetingDialog ? findClickableByTextIn(defaultGreetingDialog, ["继续沟通"]) : null;
-  if (continueButton) {
-    await pressTrustedOrSyntheticClick(continueButton as HTMLElement);
-    await sleep(1200);
-  }
-}
+type ChatStartOutcome = { kind: "input"; input: HTMLElement } | { kind: "alreadySent" };
 
-async function waitForChatInputAfterStartingConversation(timeoutMs: number): Promise<HTMLElement | null> {
+async function waitForChatInputOrConfirmation(timeoutMs: number): Promise<ChatStartOutcome | null> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    const input = findChatInput();
-    if (input) return input;
+    // Boss already sent the (default) greeting and is only asking whether to keep chatting.
+    // Treat that as a successful application and dismiss the popup without leaving the page.
+    const confirmationDialog = findDefaultGreetingDialog();
+    if (confirmationDialog) {
+      await dismissDefaultGreetingDialog(confirmationDialog);
+      return { kind: "alreadySent" };
+    }
 
-    await continuePastDefaultGreetingDialog();
+    const input = findChatInput();
+    if (input) return { kind: "input", input };
+
     await sleep(300);
   }
-  return findChatInput();
+  const input = findChatInput();
+  return input ? { kind: "input", input } : null;
+}
+
+async function dismissDefaultGreetingDialog(dialog: HTMLElement): Promise<void> {
+  // Prefer 「留在此页」 so we stay on the job page and the batch run can open the next job.
+  // 「继续沟通」 would navigate to the chat page and abort the remaining tasks.
+  const stayButton = findClickableByTextIn(dialog, ["留在此页", "留在本页", "留在当前页"]);
+  if (!stayButton) return;
+  await pressTrustedOrSyntheticClick(stayButton);
+  await sleep(500);
 }
 
 function findDefaultGreetingDialog(): HTMLElement | null {
@@ -265,7 +280,9 @@ function findDefaultGreetingDialog(): HTMLElement | null {
     document.querySelectorAll<HTMLElement>("[role='dialog'], .dialog-container, [class*='dialog'], [class*='modal']"),
   );
   const matchedScopedDialog = scopedDialogs.find(hasDefaultGreetingText);
-  if (matchedScopedDialog) return matchedScopedDialog;
+  if (matchedScopedDialog) {
+    return findAncestorWithActionButton(matchedScopedDialog) ?? matchedScopedDialog;
+  }
 
   const textNodes = Array.from(document.querySelectorAll<HTMLElement>("body *")).filter((element) => {
     if (!isVisibleElement(element)) return false;
@@ -277,7 +294,7 @@ function findDefaultGreetingDialog(): HTMLElement | null {
     return ownText.includes("已向BOSS发送消息") || ownText.includes("修改打招呼内容");
   });
   for (const textNode of textNodes) {
-    const container = findAncestorWithContinueButton(textNode);
+    const container = findAncestorWithActionButton(textNode);
     if (container) return container;
   }
 
@@ -289,10 +306,10 @@ function hasDefaultGreetingText(element: HTMLElement): boolean {
   return text.includes("已向BOSS发送消息") || text.includes("修改打招呼内容");
 }
 
-function findAncestorWithContinueButton(element: HTMLElement): HTMLElement | null {
+function findAncestorWithActionButton(element: HTMLElement): HTMLElement | null {
   let current: HTMLElement | null = element;
   for (let depth = 0; current && depth < 6; depth += 1) {
-    if (findClickableByTextIn(current, ["继续沟通"])) return current;
+    if (findClickableByTextIn(current, ["留在此页", "留在本页", "继续沟通"])) return current;
     current = current.parentElement;
   }
   return null;
